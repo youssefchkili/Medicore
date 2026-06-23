@@ -1,0 +1,457 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum Role {
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum BloodType {
+  A_POS
+  A_NEG
+  B_POS
+  B_NEG
+  AB_POS
+  AB_NEG
+  O_POS
+  O_NEG
+  UNKNOWN
+}
+
+enum Urgency {
+  LOW
+  MEDIUM
+  HIGH
+  EMERGENCY
+}
+
+enum DiagnosticStatus {
+  PENDING_REVIEW
+  REVIEWED
+  ARCHIVED
+}
+
+enum AppointmentType {
+  ONLINE
+  IN_PERSON
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum SessionStatus {
+  WAITING
+  ACTIVE
+  ENDED
+}
+
+enum ChatStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum NotificationType {
+  APPOINTMENT_CONFIRMED
+  APPOINTMENT_REMINDER
+  APPOINTMENT_CANCELLED
+  DIAGNOSTIC_READY
+  SESSION_STARTED
+  SYSTEM
+}
+
+// ─────────────────────────────────────────────
+// CORE — AUTH & USERS
+// ─────────────────────────────────────────────
+
+/// Extension of Supabase auth.users. id = auth.uid()
+model Profile {
+  id            String    @id @db.Uuid
+  role          Role
+  firstName     String    @map("first_name")
+  lastName      String    @map("last_name")
+  phone         String?
+  dateOfBirth   DateTime? @map("date_of_birth") @db.Date
+  gender        Gender?
+  avatarUrl     String?   @map("avatar_url")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  doctor        Doctor?
+  patient       Patient?
+  auditLogs     AuditLog[]
+  notifications Notification[]
+
+  @@index([role])
+  @@map("profiles")
+}
+
+model Specialty {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  icon        String?
+  isActive    Boolean  @default(true) @map("is_active")
+
+  doctors     Doctor[]
+
+  @@map("specialties")
+}
+
+model Doctor {
+  id               String   @id @default(uuid()) @db.Uuid
+  profileId        String   @unique @map("profile_id") @db.Uuid
+  specialtyId      String   @map("specialty_id") @db.Uuid
+  licenseNumber    String   @unique @map("license_number")
+  bio              String?
+  yearsExperience  Int?     @map("years_experience")
+  consultationFee  Decimal? @map("consultation_fee") @db.Decimal(10, 2)
+  isAvailable      Boolean  @default(true) @map("is_available")
+  rating           Float?
+  faceRegistered   Boolean  @default(false) @map("face_registered")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  profile           Profile            @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  specialty         Specialty          @relation(fields: [specialtyId], references: [id])
+  availabilitySlots AvailabilitySlot[]
+  appointments      Appointment[]
+  sessions          Session[]
+  medicalRecords    MedicalRecord[]
+  reviewedDiagnostics PreDiagnostic[]  @relation("ReviewedBy")
+  faceEmbedding     FaceEmbedding?
+  biometricLogs     BiometricLoginLog[]
+
+  @@index([specialtyId])
+  @@index([isAvailable])
+  @@map("doctors")
+}
+
+model Patient {
+  id                String     @id @default(uuid()) @db.Uuid
+  profileId         String     @unique @map("profile_id") @db.Uuid
+  bloodType         BloodType? @map("blood_type")
+  allergies         String[]   @default([])
+  chronicConditions String[]   @default([]) @map("chronic_conditions")
+  emergencyContact  Json?      @map("emergency_contact")
+  insuranceInfo     Json?      @map("insurance_info")
+  createdAt         DateTime   @default(now()) @map("created_at")
+
+  profile        Profile         @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  chatSessions   ChatSession[]
+  preDiagnostics PreDiagnostic[]
+  appointments   Appointment[]
+  sessions       Session[]
+  medicalRecords MedicalRecord[]
+
+  @@map("patients")
+}
+
+// ─────────────────────────────────────────────
+// SCHEDULING
+// ─────────────────────────────────────────────
+
+model AvailabilitySlot {
+  id             String   @id @default(uuid()) @db.Uuid
+  doctorId       String   @map("doctor_id") @db.Uuid
+  startTime      DateTime @map("start_time")
+  endTime        DateTime @map("end_time")
+  isBooked       Boolean  @default(false) @map("is_booked")
+  isRecurring    Boolean  @default(false) @map("is_recurring")
+  recurrenceRule String?  @map("recurrence_rule")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  doctor      Doctor       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  appointment Appointment?
+
+  @@index([doctorId])
+  @@index([startTime])
+  @@index([isBooked])
+  @@map("availability_slots")
+}
+
+model Appointment {
+  id               String            @id @default(uuid()) @db.Uuid
+  patientId        String            @map("patient_id") @db.Uuid
+  doctorId         String            @map("doctor_id") @db.Uuid
+  preDiagnosticId  String?           @map("pre_diagnostic_id") @db.Uuid
+  slotId           String            @unique @map("slot_id") @db.Uuid
+  scheduledAt      DateTime          @map("scheduled_at")
+  durationMinutes  Int               @default(30) @map("duration_minutes")
+  type             AppointmentType   @default(ONLINE)
+  status           AppointmentStatus @default(SCHEDULED)
+  notes            String?
+  videoRoomUrl     String?           @map("video_room_url")
+  cancelledReason  String?           @map("cancelled_reason")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  patient        Patient          @relation(fields: [patientId], references: [id])
+  doctor         Doctor           @relation(fields: [doctorId], references: [id])
+  slot           AvailabilitySlot @relation(fields: [slotId], references: [id])
+  preDiagnostic  PreDiagnostic?   @relation(fields: [preDiagnosticId], references: [id])
+  session        Session?
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@map("appointments")
+}
+
+// ─────────────────────────────────────────────
+// AI CHAT & PRE-DIAGNOSTICS
+// ─────────────────────────────────────────────
+
+model ChatSession {
+  id                 String     @id @default(uuid()) @db.Uuid
+  patientId          String     @map("patient_id") @db.Uuid
+  langgraphThreadId  String     @unique @map("langgraph_thread_id")
+  status             ChatStatus @default(ACTIVE)
+  agentState         Json?      @map("agent_state")
+  tokenCount         Int        @default(0) @map("token_count")
+  startedAt          DateTime   @default(now()) @map("started_at")
+  endedAt            DateTime?  @map("ended_at")
+
+  patient          Patient           @relation(fields: [patientId], references: [id])
+  messages         ChatMessage[]
+  preDiagnostic    PreDiagnostic?
+  agentInvocations AgentInvocation[]
+
+  @@index([patientId])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id          String      @id @default(uuid()) @db.Uuid
+  sessionId   String      @map("session_id") @db.Uuid
+  role        MessageRole
+  content     String
+  agentName   String?     @map("agent_name")
+  metadata    Json?
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("chat_messages")
+}
+
+model PreDiagnostic {
+  id                 String           @id @default(uuid()) @db.Uuid
+  patientId          String           @map("patient_id") @db.Uuid
+  chatSessionId      String           @unique @map("chat_session_id") @db.Uuid
+  symptoms           Json
+  severityLevel      Int              @default(1) @map("severity_level")
+  urgency            Urgency          @default(LOW)
+  suggestedSpecialty String?          @map("suggested_specialty")
+  possibleConditions Json             @default("[]") @map("possible_conditions")
+  ragSources         Json             @default("[]") @map("rag_sources")
+  rawReport          String           @map("raw_report")
+  status             DiagnosticStatus @default(PENDING_REVIEW)
+  reviewedBy         String?          @map("reviewed_by") @db.Uuid
+  doctorNotes        String?          @map("doctor_notes")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  patient      Patient       @relation(fields: [patientId], references: [id])
+  chatSession  ChatSession   @relation(fields: [chatSessionId], references: [id])
+  doctor       Doctor?       @relation("ReviewedBy", fields: [reviewedBy], references: [id])
+  appointments Appointment[]
+
+  @@index([patientId])
+  @@index([urgency])
+  @@index([status])
+  @@map("pre_diagnostics")
+}
+
+model AgentInvocation {
+  id            String   @id @default(uuid()) @db.Uuid
+  chatSessionId String   @map("chat_session_id") @db.Uuid
+  agentName     String   @map("agent_name")
+  input         Json
+  output        Json?
+  tokensUsed    Int      @default(0) @map("tokens_used")
+  latencyMs     Int?     @map("latency_ms")
+  error         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  chatSession ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+
+  @@index([chatSessionId])
+  @@index([createdAt])
+  @@map("agent_invocations")
+}
+
+// ─────────────────────────────────────────────
+// DOCTOR SESSIONS & MEDICAL RECORDS
+// ─────────────────────────────────────────────
+
+model Session {
+  id              String        @id @default(uuid()) @db.Uuid
+  appointmentId   String        @unique @map("appointment_id") @db.Uuid
+  doctorId        String        @map("doctor_id") @db.Uuid
+  patientId       String        @map("patient_id") @db.Uuid
+  startedAt       DateTime?     @map("started_at")
+  endedAt         DateTime?     @map("ended_at")
+  soapSummary     Json?         @map("soap_summary")
+  emotionTimeline Json?         @map("emotion_timeline")
+  recordingUrl    String?       @map("recording_url")
+  status          SessionStatus @default(WAITING)
+
+  appointment      Appointment       @relation(fields: [appointmentId], references: [id])
+  doctor           Doctor            @relation(fields: [doctorId], references: [id])
+  patient          Patient           @relation(fields: [patientId], references: [id])
+  emotionSnapshots EmotionSnapshot[]
+  medicalRecord    MedicalRecord?
+
+  @@map("sessions")
+}
+
+model MedicalRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  patientId      String   @map("patient_id") @db.Uuid
+  sessionId      String?  @unique @map("session_id") @db.Uuid
+  doctorId       String   @map("doctor_id") @db.Uuid
+  soapNotes      Json     @map("soap_notes")
+  diagnosis      String?
+  prescription   Json?
+  attachments    String[] @default([])
+  isConfidential Boolean  @default(false) @map("is_confidential")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  patient Patient  @relation(fields: [patientId], references: [id])
+  session Session? @relation(fields: [sessionId], references: [id])
+  doctor  Doctor   @relation(fields: [doctorId], references: [id])
+
+  @@index([patientId])
+  @@map("medical_records")
+}
+
+// ─────────────────────────────────────────────
+// COMPUTER VISION & BIOMETRICS
+// ─────────────────────────────────────────────
+
+model FaceEmbedding {
+  id             String   @id @default(uuid()) @db.Uuid
+  doctorId       String   @unique @map("doctor_id") @db.Uuid
+  /// 512-dim ArcFace embedding stored as float array
+  embedding      Float[]
+  modelUsed      String   @default("ArcFace") @map("model_used")
+  antiSpoofScore Float?   @map("anti_spoof_score")
+  enrolledAt     DateTime @default(now()) @map("enrolled_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@map("face_embeddings")
+}
+
+model EmotionSnapshot {
+  id              String   @id @default(uuid()) @db.Uuid
+  sessionId       String   @map("session_id") @db.Uuid
+  timestamp       DateTime
+  dominantEmotion String   @map("dominant_emotion")
+  happy           Float    @default(0)
+  sad             Float    @default(0)
+  fearful         Float    @default(0)
+  angry           Float    @default(0)
+  surprised       Float    @default(0)
+  disgusted       Float    @default(0)
+  neutral         Float    @default(0)
+  confidence      Float    @default(0)
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([timestamp])
+  @@map("emotion_snapshots")
+}
+
+model BiometricLoginLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  doctorId        String   @map("doctor_id") @db.Uuid
+  success         Boolean
+  similarityScore Float    @map("similarity_score")
+  antiSpoofPass   Boolean  @map("anti_spoof_pass")
+  ipAddress       String?  @map("ip_address")
+  userAgent       String?  @map("user_agent")
+  attemptedAt     DateTime @default(now()) @map("attempted_at")
+
+  doctor Doctor @relation(fields: [doctorId], references: [id])
+
+  @@index([doctorId])
+  @@index([attemptedAt])
+  @@map("biometric_login_logs")
+}
+
+// ─────────────────────────────────────────────
+// NOTIFICATIONS & AUDIT
+// ─────────────────────────────────────────────
+
+model Notification {
+  id           String           @id @default(uuid()) @db.Uuid
+  recipientId  String           @map("recipient_id") @db.Uuid
+  type         NotificationType
+  title        String
+  body         String
+  data         Json?
+  isRead       Boolean          @default(false) @map("is_read")
+  sentViaEmail Boolean          @default(false) @map("sent_via_email")
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  recipient Profile @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  actorId      String   @map("actor_id") @db.Uuid
+  action       String
+  resourceType String   @map("resource_type")
+  resourceId   String?  @map("resource_id")
+  metadata     Json?
+  ipAddress    String?  @map("ip_address")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  actor Profile @relation(fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
