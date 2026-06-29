@@ -4,8 +4,10 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { FastifyRequest } from 'fastify';
 import { AiProxyService } from './ai-proxy.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -15,7 +17,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { StartChatDto } from './dto/start-chat.dto';
 import { DiagnosticWebhookDto } from './dto/diagnostic-webhook.dto';
 import { Role } from '../generated/prisma';
-import type { Profile } from '../generated/prisma';
+import type { Doctor, Profile } from '../generated/prisma';
 
 @Controller('ai-proxy')
 export class AiProxyController {
@@ -48,5 +50,37 @@ export class AiProxyController {
   @Roles(Role.ADMIN)
   triggerScraperRefresh() {
     return this.aiProxyService.triggerScraperRefresh();
+  }
+
+  // Doctor uploads 1-5 photos to enroll their face for biometric login.
+  // Sets Doctor.faceRegistered = true on success.
+  // Must be called with multipart/form-data; field name for files is "photos".
+  @Post('face/enroll')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.DOCTOR)
+  enrollFace(
+    @CurrentUser() user: Profile & { doctor: Doctor | null },
+    @Req() req: FastifyRequest,
+  ) {
+    if (!user.doctor) {
+      throw new Error('Doctor record not initialised');
+    }
+    return this.aiProxyService.enrollFace(user.doctor.id, req);
+  }
+
+  // Doctor sends a live photo to verify their face (2FA step after JWT login).
+  // Returns { success, similarityScore, antiSpoofPass }.
+  // Must be called with multipart/form-data; field name for the file is "photo".
+  @Post('face/verify')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.DOCTOR)
+  verifyFace(
+    @CurrentUser() user: Profile & { doctor: Doctor | null },
+    @Req() req: FastifyRequest,
+  ) {
+    if (!user.doctor) {
+      throw new Error('Doctor record not initialised');
+    }
+    return this.aiProxyService.verifyFace(user.doctor.id, req);
   }
 }

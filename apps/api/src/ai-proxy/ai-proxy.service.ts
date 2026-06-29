@@ -1,8 +1,14 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { randomUUID } from 'crypto';
+import type { FastifyRequest } from 'fastify';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DiagnosticWebhookDto } from './dto/diagnostic-webhook.dto';
@@ -94,6 +100,59 @@ export class AiProxyService {
       this.logger.error('Scraper refresh failed', err);
       throw err;
     }
+  }
+
+  // ─── Face enroll: proxy multipart upload to FastAPI, then set face_registered ─
+
+  async enrollFace(doctorId: string, req: FastifyRequest): Promise<unknown> {
+    const formData = new FormData();
+    formData.append('doctor_id', doctorId);
+
+    // @fastify/multipart adds .files() to the request
+    const parts = (req as any).files() as AsyncIterable<any>;
+    let fileCount = 0;
+    for await (const part of parts) {
+      const buffer: Buffer = await part.toBuffer();
+      formData.append('photos', new Blob([new Uint8Array(buffer)], { type: part.mimetype }), part.filename);
+      fileCount++;
+    }
+
+    if (fileCount === 0) throw new BadRequestException('At least one photo is required');
+
+    const { data } = await firstValueFrom(
+      this.http.post(`${this.aiUrl}/face/enroll`, formData, {
+        headers: this.aiHeaders,
+      }),
+    );
+
+    await this.prisma.doctor.update({
+      where: { id: doctorId },
+      data: { faceRegistered: true },
+    });
+
+    this.logger.log(`Face enrolled for doctor ${doctorId} (${fileCount} photo(s))`);
+    return data;
+  }
+
+  // ─── Face verify: proxy single photo to FastAPI (used as 2FA after JWT login) ─
+
+  async verifyFace(doctorId: string, req: FastifyRequest): Promise<unknown> {
+    const part = await (req as any).file() as any;
+    if (!part) throw new BadRequestException('Photo is required');
+
+    const buffer: Buffer = await part.toBuffer();
+    const formData = new FormData();
+    formData.append('doctor_id', doctorId);
+    formData.append('photo', new Blob([new Uint8Array(buffer)], { type: part.mimetype }), part.filename);
+
+    const { data } = await firstValueFrom(
+      this.http.post(`${this.aiUrl}/face/verify`, formData, {
+        headers: this.aiHeaders,
+      }),
+    );
+
+    this.logger.log(`Face verify for doctor ${doctorId}: success=${(data as any).success}`);
+    return data;
   }
 
   // ─── Internal: get a chat session (used by AI side for context) ───────────

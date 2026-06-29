@@ -5,6 +5,7 @@ import {
 } from '@nestjs/platform-fastify';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import multipart from '@fastify/multipart';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -12,6 +13,9 @@ async function bootstrap() {
     AppModule,
     new FastifyAdapter(),
   );
+
+  // Register multipart support so face enroll/verify endpoints can receive file uploads
+  await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } });
 
   const config = app.get(ConfigService);
 

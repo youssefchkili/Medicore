@@ -11,6 +11,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { MedicalRecordsModule } from './medical-records/medical-records.module';
 import { AdminModule } from './admin/admin.module';
 import { AiProxyModule } from './ai-proxy/ai-proxy.module';
+import { SessionsModule } from './sessions/sessions.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { AiProxyModule } from './ai-proxy/ai-proxy.module';
     MedicalRecordsModule,
     AdminModule,
     AiProxyModule,
+    SessionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
