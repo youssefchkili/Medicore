@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
+import { resolvePublicKey } from './supabase-jwks';
 
 export interface JwtPayload {
   sub: string;   // Supabase auth.uid()
@@ -15,14 +16,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     configService: ConfigService,
     private prisma: PrismaService,
   ) {
+    const supabaseUrl = configService.getOrThrow<string>('SUPABASE_URL');
+
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      // Supabase signs JWTs with the raw bytes of the secret (base64-encoded in dashboard)
-      secretOrKey: Buffer.from(
-        configService.getOrThrow<string>('SUPABASE_JWT_SECRET'),
-        'base64',
-      ),
+      secretOrKeyProvider: (
+        _req: unknown,
+        _rawJwt: string,
+        done: (err: Error | null, key?: string) => void,
+      ) => {
+        resolvePublicKey(supabaseUrl)
+          .then(key => done(null, key))
+          .catch(err => done(err as Error));
+      },
     });
   }
 

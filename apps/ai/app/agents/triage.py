@@ -75,7 +75,5 @@ async def triage_agent(state: MedicalAgentState) -> dict:
         "awaiting_user_input": False,
         "current_agent": "triage",
         "token_count": tokens,
-        "messages": [
-            {"role": "assistant", "content": f"Triage complete. Urgency: {result.urgency}. {result.reasoning}"}
-        ],
+        # No user-facing message — triage is an internal routing agent
     }

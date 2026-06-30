@@ -17,6 +17,7 @@ class MedicalAgentState(TypedDict):
     needs_clarification: bool
     clarification_question: Optional[str]
     triage_complete: bool
+    emergency_notified: bool  # True after the one-time emergency warning is shown
     symptom_collection_complete: bool
     rag_complete: bool
     awaiting_user_input: bool

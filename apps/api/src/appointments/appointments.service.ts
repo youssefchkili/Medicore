@@ -8,8 +8,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BookAppointmentDto } from './dto/book-appointment.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { CreateSlotDto } from './dto/create-slot.dto';
-import { AppointmentStatus, Role } from '../generated/prisma';
-import type { Profile } from '../generated/prisma';
+import { AppointmentStatus, Role } from '@prisma/client';
+import type { Profile } from '@prisma/client';
 
 const APPOINTMENT_INCLUDE = {
   patient: { include: { profile: true } },
@@ -23,6 +23,17 @@ export class AppointmentsService {
   constructor(private prisma: PrismaService) {}
 
   // ─── Availability slots ────────────────────────────────────────────────────
+
+  async getMySlots(profile: Profile) {
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { profileId: profile.id },
+    });
+    if (!doctor) return [];
+    return this.prisma.availabilitySlot.findMany({
+      where: { doctorId: doctor.id, startTime: { gte: new Date() } },
+      orderBy: { startTime: 'asc' },
+    });
+  }
 
   async getAvailableSlots(doctorId: string) {
     return this.prisma.availabilitySlot.findMany({
@@ -43,6 +54,7 @@ export class AppointmentsService {
 
     const start = new Date(dto.startTime);
     const end = new Date(dto.endTime);
+    if (start <= new Date()) throw new BadRequestException('startTime must be in the future');
     if (end <= start) throw new BadRequestException('endTime must be after startTime');
 
     return this.prisma.availabilitySlot.create({

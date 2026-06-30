@@ -6,7 +6,7 @@ import {
   IsString,
   IsUUID,
 } from 'class-validator';
-import { AppointmentType } from '../../generated/prisma';
+import { AppointmentType } from '@prisma/client';
 
 export class BookAppointmentDto {
   @IsUUID()

@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationType } from '../generated/prisma';
+import { NotificationType } from '@prisma/client';
 
 interface SendNotificationOptions {
   recipientId: string;

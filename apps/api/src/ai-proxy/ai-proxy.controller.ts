@@ -16,8 +16,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { StartChatDto } from './dto/start-chat.dto';
 import { DiagnosticWebhookDto } from './dto/diagnostic-webhook.dto';
-import { Role } from '../generated/prisma';
-import type { Doctor, Profile } from '../generated/prisma';
+import { Role } from '@prisma/client';
+import type { Doctor, Profile } from '@prisma/client';
 
 @Controller('ai-proxy')
 export class AiProxyController {

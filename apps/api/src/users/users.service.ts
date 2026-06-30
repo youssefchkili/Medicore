@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
-import { Role } from '../generated/prisma';
+import { Role } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
@@ -42,37 +42,54 @@ export class UsersService {
   }
 
   async updatePatient(profileId: string, dto: UpdatePatientDto) {
-    const patient = await this.prisma.patient.findUnique({
-      where: { profileId },
-    });
-    if (!patient) throw new NotFoundException('Patient record not found');
+    const data = {
+      ...(dto.bloodType && { bloodType: dto.bloodType }),
+      ...(dto.allergies !== undefined && { allergies: dto.allergies }),
+      ...(dto.chronicConditions !== undefined && { chronicConditions: dto.chronicConditions }),
+      ...(dto.emergencyContact !== undefined && { emergencyContact: dto.emergencyContact }),
+      ...(dto.insuranceInfo !== undefined && { insuranceInfo: dto.insuranceInfo }),
+    };
 
-    return this.prisma.patient.update({
+    return this.prisma.patient.upsert({
       where: { profileId },
-      data: {
-        ...(dto.bloodType && { bloodType: dto.bloodType }),
-        ...(dto.allergies && { allergies: dto.allergies }),
-        ...(dto.chronicConditions && { chronicConditions: dto.chronicConditions }),
-        ...(dto.emergencyContact !== undefined && { emergencyContact: dto.emergencyContact }),
-        ...(dto.insuranceInfo !== undefined && { insuranceInfo: dto.insuranceInfo }),
-      },
+      create: { profileId, ...data },
+      update: data,
     });
   }
 
   async updateDoctor(profileId: string, dto: UpdateDoctorDto) {
-    const doctor = await this.prisma.doctor.findUnique({
-      where: { profileId },
-    });
-    if (!doctor) throw new NotFoundException('Doctor record not found');
+    const existing = await this.prisma.doctor.findUnique({ where: { profileId } });
+
+    const sharedFields = {
+      ...(dto.bio !== undefined && { bio: dto.bio }),
+      ...(dto.yearsExperience !== undefined && { yearsExperience: dto.yearsExperience }),
+      ...(dto.consultationFee !== undefined && { consultationFee: dto.consultationFee }),
+      ...(dto.isAvailable !== undefined && { isAvailable: dto.isAvailable }),
+    };
+
+    if (!existing) {
+      if (!dto.licenseNumber) {
+        throw new BadRequestException('licenseNumber is required to create your doctor profile');
+      }
+      if (!dto.specialtyId) {
+        throw new BadRequestException('specialtyId is required to create your doctor profile');
+      }
+      return this.prisma.doctor.create({
+        data: {
+          profileId,
+          licenseNumber: dto.licenseNumber,
+          specialtyId: dto.specialtyId,
+          ...sharedFields,
+        },
+        include: { specialty: true },
+      });
+    }
 
     return this.prisma.doctor.update({
       where: { profileId },
       data: {
         ...(dto.specialtyId && { specialtyId: dto.specialtyId }),
-        ...(dto.bio !== undefined && { bio: dto.bio }),
-        ...(dto.yearsExperience !== undefined && { yearsExperience: dto.yearsExperience }),
-        ...(dto.consultationFee !== undefined && { consultationFee: dto.consultationFee }),
-        ...(dto.isAvailable !== undefined && { isAvailable: dto.isAvailable }),
+        ...sharedFields,
       },
       include: { specialty: true },
     });

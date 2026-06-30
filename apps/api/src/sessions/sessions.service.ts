@@ -7,8 +7,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { EndSessionDto } from './dto/end-session.dto';
-import { NotificationType, Role, SessionStatus } from '../generated/prisma';
-import type { Doctor, Patient, Profile } from '../generated/prisma';
+import { NotificationType, Role, SessionStatus } from '@prisma/client';
+import type { Doctor, Patient, Profile } from '@prisma/client';
 
 type AuthUser = Profile & { doctor: Doctor | null; patient: Patient | null };
 

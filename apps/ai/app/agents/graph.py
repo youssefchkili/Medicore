@@ -11,16 +11,17 @@ from app.agents.report_agent import report_agent
 
 def emergency_response(state: MedicalAgentState) -> dict:
     return {
-        "is_complete": True,
-        "awaiting_user_input": False,
+        "emergency_notified": True,
+        "awaiting_user_input": True,  # pause for user — don't end the session
         "current_agent": "emergency_response",
         "messages": [
             {
                 "role": "assistant",
                 "content": (
-                    "EMERGENCY: Please seek immediate medical attention or call your local "
-                    "emergency services now. Do not wait. This platform is not a substitute "
-                    "for emergency care."
+                    "⚠️ EMERGENCY: Please call emergency services or go to the nearest emergency room immediately. "
+                    "Do not wait — this platform is not a substitute for emergency care.\n\n"
+                    "If you are safe and able to continue, please describe your symptoms in more detail "
+                    "so we can prepare a pre-diagnostic report for the medical team."
                 ),
             }
         ],

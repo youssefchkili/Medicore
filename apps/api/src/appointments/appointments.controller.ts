@@ -18,8 +18,8 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { BookAppointmentDto } from './dto/book-appointment.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { CreateSlotDto } from './dto/create-slot.dto';
-import { Role } from '../generated/prisma';
-import type { Profile } from '../generated/prisma';
+import { Role } from '@prisma/client';
+import type { Profile } from '@prisma/client';
 
 @UseGuards(JwtAuthGuard)
 @Controller()
@@ -27,6 +27,13 @@ export class AppointmentsController {
   constructor(private appointmentsService: AppointmentsService) {}
 
   // ─── Availability slots ────────────────────────────────────────────────────
+
+  @Get('availability/me')
+  @UseGuards(RolesGuard)
+  @Roles(Role.DOCTOR)
+  getMySlots(@CurrentUser() user: Profile) {
+    return this.appointmentsService.getMySlots(user);
+  }
 
   @Get('availability/:doctorId')
   getAvailableSlots(@Param('doctorId', ParseUUIDPipe) doctorId: string) {

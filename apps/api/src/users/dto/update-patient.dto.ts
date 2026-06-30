@@ -5,7 +5,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
-import { BloodType } from '../../generated/prisma';
+import { BloodType } from '@prisma/client';
 
 export class UpdatePatientDto {
   @IsOptional()

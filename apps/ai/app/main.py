@@ -1,6 +1,9 @@
 import logging
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
+load_dotenv()  # must run before any module-level LLM/client init
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

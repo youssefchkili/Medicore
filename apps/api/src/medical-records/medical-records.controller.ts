@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { MedicalRecordsService } from './medical-records.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -15,8 +16,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { CreateMedicalRecordDto } from './dto/create-medical-record.dto';
 import { ReviewDiagnosticDto } from './dto/review-diagnostic.dto';
-import { Role } from '../generated/prisma';
-import type { Profile } from '../generated/prisma';
+import { Role } from '@prisma/client';
+import type { Profile } from '@prisma/client';
 
 @UseGuards(JwtAuthGuard)
 @Controller()
@@ -48,8 +49,11 @@ export class MedicalRecordsController {
   // ─── Pre-diagnostics ───────────────────────────────────────────────────────
 
   @Get('diagnostics')
-  getMyDiagnostics(@CurrentUser() user: Profile) {
-    return this.medicalRecordsService.getMyDiagnostics(user);
+  getMyDiagnostics(
+    @CurrentUser() user: Profile,
+    @Query('pending') pending?: string,
+  ) {
+    return this.medicalRecordsService.getMyDiagnostics(user, pending === 'true');
   }
 
   @Get('diagnostics/:id')

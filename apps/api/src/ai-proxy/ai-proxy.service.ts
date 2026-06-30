@@ -12,7 +12,7 @@ import type { FastifyRequest } from 'fastify';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { DiagnosticWebhookDto } from './dto/diagnostic-webhook.dto';
-import { NotificationType, Urgency } from '../generated/prisma';
+import { NotificationType, Urgency } from '@prisma/client';
 
 @Injectable()
 export class AiProxyService {

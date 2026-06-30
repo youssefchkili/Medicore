@@ -33,6 +33,7 @@ def _initial_state(patient_id: str, session_id: str) -> dict:
         "needs_clarification": False,
         "clarification_question": None,
         "triage_complete": False,
+        "emergency_notified": False,
         "symptom_collection_complete": False,
         "rag_complete": False,
         "awaiting_user_input": False,
@@ -88,7 +89,7 @@ async def chat_ws(websocket: WebSocket, session_id: str):
             # Stream through the graph — each chunk is {node_name: state_delta}
             async for chunk in graph.astream(state):
                 for node_name, node_output in chunk.items():
-                    if node_name.startswith("__"):
+                    if node_name.startswith("__") or node_output is None:
                         continue
 
                     # Forward any new assistant messages to the client immediately

@@ -10,7 +10,7 @@ import {
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import type { Profile } from '../generated/prisma';
+import type { Profile } from '@prisma/client';
 
 @UseGuards(JwtAuthGuard)
 @Controller('notifications')

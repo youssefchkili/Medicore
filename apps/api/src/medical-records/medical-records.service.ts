@@ -6,8 +6,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMedicalRecordDto } from './dto/create-medical-record.dto';
 import { ReviewDiagnosticDto } from './dto/review-diagnostic.dto';
-import { Role } from '../generated/prisma';
-import type { Profile } from '../generated/prisma';
+import { Role } from '@prisma/client';
+import type { Profile } from '@prisma/client';
 
 @Injectable()
 export class MedicalRecordsService {
@@ -78,7 +78,7 @@ export class MedicalRecordsService {
 
   // ─── Pre-diagnostics ───────────────────────────────────────────────────────
 
-  async getMyDiagnostics(profile: Profile) {
+  async getMyDiagnostics(profile: Profile, pendingOnly = false) {
     if (profile.role === Role.PATIENT) {
       const patient = await this.prisma.patient.findUnique({
         where: { profileId: profile.id },
@@ -94,6 +94,15 @@ export class MedicalRecordsService {
       where: { profileId: profile.id },
     });
     if (!doctor) return [];
+
+    if (pendingOnly) {
+      return this.prisma.preDiagnostic.findMany({
+        where: { status: 'PENDING_REVIEW' },
+        include: { patient: { include: { profile: true } } },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
     return this.prisma.preDiagnostic.findMany({
       where: { reviewedBy: doctor.id },
       include: { patient: { include: { profile: true } } },

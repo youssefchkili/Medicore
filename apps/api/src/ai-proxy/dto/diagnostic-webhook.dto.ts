@@ -1,5 +1,5 @@
 import { IsEnum, IsUUID } from 'class-validator';
-import { Urgency } from '../../generated/prisma';
+import { Urgency } from '@prisma/client';
 
 export class DiagnosticWebhookDto {
   @IsUUID()

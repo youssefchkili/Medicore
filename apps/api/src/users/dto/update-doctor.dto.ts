@@ -10,6 +10,10 @@ import {
 
 export class UpdateDoctorDto {
   @IsOptional()
+  @IsString()
+  licenseNumber?: string;
+
+  @IsOptional()
   @IsUUID()
   specialtyId?: string;
 

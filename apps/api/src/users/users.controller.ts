@@ -18,8 +18,8 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
-import type { Profile } from '../generated/prisma';
-import { Role } from '../generated/prisma';
+import type { Profile } from '@prisma/client';
+import { Role } from '@prisma/client';
 
 @UseGuards(JwtAuthGuard)
 @Controller('users')

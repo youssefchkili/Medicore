@@ -10,14 +10,15 @@ def should_route_to(state: MedicalAgentState) -> Literal[
     if state.get("awaiting_user_input", False):
         return END
 
-    # Check completion early so emergency_response and report_agent don't loop
+    # Check completion early so report_agent doesn't loop
     if state.get("is_complete", False):
         return END
 
     if not state.get("triage_complete", False):
         return "triage"
 
-    if state.get("urgency") == "EMERGENCY":
+    # Show emergency warning once, then continue collecting symptoms normally
+    if state.get("urgency") == "EMERGENCY" and not state.get("emergency_notified", False):
         return "emergency_response"
 
     if state.get("needs_clarification", False):

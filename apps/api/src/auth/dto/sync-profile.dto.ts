@@ -1,5 +1,5 @@
 import { IsEnum, IsString, MinLength } from 'class-validator';
-import { Role } from '../../generated/prisma';
+import { Role } from '@prisma/client';
 
 // id is intentionally removed — it is taken from the verified JWT, not the request body
 export class SyncProfileDto {

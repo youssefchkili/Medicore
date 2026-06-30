@@ -20,12 +20,6 @@ class RAGOutput(BaseModel):
     )
 
 
-try:
-    _retriever = get_retriever(k=5)
-except Exception as e:
-    print(f"[RAG] Warning: Could not initialize retriever: {e}")
-    _retriever = None
-
 _llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
 _structured_llm = _llm.with_structured_output(RAGOutput, include_raw=True)
 
@@ -40,23 +34,27 @@ _chain = _prompt | _structured_llm
 
 
 async def rag_agent(state: MedicalAgentState) -> dict:
-    if not _retriever:
+    # Lazy connect — works even if Qdrant started after the AI service booted
+    retriever = None
+    try:
+        retriever = get_retriever(k=5)
+    except Exception as e:
+        logger.warning("RAG retriever unavailable: %s", e)
+
+    if not retriever:
         return {
             "possible_conditions": [],
             "rag_sources": [],
             "rag_complete": True,
             "current_agent": "rag_agent",
             "token_count": 0,
-            "messages": [
-                {"role": "assistant", "content": "Medical knowledge base is unavailable. Proceeding with available information."}
-            ],
         }
 
     symptoms = state.get("symptoms", {})
     query = f"Patient symptoms: {json.dumps(symptoms)}. What medical conditions match these symptoms?"
 
     start = time.monotonic()
-    docs = await _retriever.ainvoke(query)
+    docs = await retriever.ainvoke(query)
 
     context = "\n\n---\n\n".join([
         f"Source: {doc.metadata.get('source_title', 'Unknown')}\n{doc.page_content}"
