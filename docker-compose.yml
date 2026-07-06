@@ -3,6 +3,7 @@ services:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
+      target: deps
     ports:
       - "3000:3000"
     env_file: ./apps/web/.env.local
@@ -20,18 +21,18 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
+      target: builder
     ports:
       - "3001:3001"
     env_file: ./apps/api/.env
     environment:
       - NODE_ENV=development
-    command: npm run start:dev
+    command: sh -c "npx prisma migrate deploy && npm run start:dev"
     depends_on:
       - qdrant
     volumes:
       - ./apps/api:/app
       - /app/node_modules
-      - /app/dist
 
   ai:
     build:

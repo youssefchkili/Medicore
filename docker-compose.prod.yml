@@ -3,40 +3,57 @@ services:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_AI_WS_URL: ${NEXT_PUBLIC_AI_WS_URL}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+    # No ports — web is only reachable through nginx, not directly from the internet
     env_file: ./apps/web/.env.local
     environment:
       - NODE_ENV=production
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
 
   api:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
-    ports:
-      - "3001:3001"
+    # No ports — api is only reachable through nginx
     env_file: ./apps/api/.env
     environment:
       - NODE_ENV=production
     restart: unless-stopped
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   ai:
     build:
       context: ./apps/ai
       dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
+    # No ports — ai is only reachable through nginx
     env_file: ./apps/ai/.env
     restart: unless-stopped
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_started
     volumes:
       - deepface_models:/root/.deepface
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
 
   nginx:
     build:
@@ -47,14 +64,12 @@ services:
       - "443:443"
     restart: unless-stopped
     depends_on:
-      - web
-      - api
-      - ai
+      api:
+        condition: service_healthy
 
   qdrant:
     image: qdrant/qdrant:latest
-    ports:
-      - "6333:6333"
+    # No ports — qdrant is only reachable by api and ai internally
     volumes:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped

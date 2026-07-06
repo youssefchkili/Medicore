@@ -14,6 +14,7 @@ type Appointment = {
   notes: string | null;
   durationMinutes: number;
   cancelledReason: string | null;
+  videoRoomUrl: string | null;
   patient: {
     profile: { firstName: string; lastName: string; avatarUrl: string | null };
   };
@@ -206,6 +207,20 @@ export default function DoctorAppointmentsPage() {
                       >
                         {actionLoading === a.id ? "…" : "Confirm"}
                       </button>
+                    )}
+                    {a.status === "CONFIRMED" && a.videoRoomUrl && (
+                      <a
+                        href={a.videoRoomUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] font-heading font-semibold text-[12px] text-white bg-[#2563EB] hover:bg-[#1D4ED8] transition-colors"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                          <polygon points="23 7 16 12 23 17 23 7" />
+                          <rect x="1" y="5" width="15" height="14" rx="2" />
+                        </svg>
+                        Join
+                      </a>
                     )}
                     {(a.status === "SCHEDULED" || a.status === "CONFIRMED") && (
                       <button

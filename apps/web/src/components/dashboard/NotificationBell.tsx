@@ -13,11 +13,15 @@ type Notification = {
 };
 
 const TYPE_META: Record<string, { icon: React.ReactNode; iconBg: string }> = {
-  DIAGNOSTIC_READY: {
-    iconBg: "#ECFDF5",
+  APPOINTMENT_BOOKED: {
+    iconBg: "#FFF7ED",
     icon: (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2">
-        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8L14 2z" />
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EA580C" strokeWidth="2">
+        <rect x="3" y="4" width="18" height="18" rx="2" />
+        <line x1="16" y1="2" x2="16" y2="6" />
+        <line x1="8" y1="2" x2="8" y2="6" />
+        <line x1="3" y1="10" x2="21" y2="10" />
+        <path d="M12 14v4M10 16h4" />
       </svg>
     ),
   },
@@ -29,11 +33,28 @@ const TYPE_META: Record<string, { icon: React.ReactNode; iconBg: string }> = {
       </svg>
     ),
   },
+  APPOINTMENT_REMINDER: {
+    iconBg: "#FFFBEB",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+    ),
+  },
   APPOINTMENT_CANCELLED: {
     iconBg: "#FFF1F2",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E11D48" strokeWidth="2">
         <path d="M18 6L6 18M6 6l12 12" />
+      </svg>
+    ),
+  },
+  DIAGNOSTIC_READY: {
+    iconBg: "#ECFDF5",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8L14 2z" />
       </svg>
     ),
   },
@@ -43,6 +64,16 @@ const TYPE_META: Record<string, { icon: React.ReactNode; iconBg: string }> = {
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="2">
         <polygon points="23 7 16 12 23 17 23 7" />
         <rect x="1" y="5" width="15" height="14" rx="2" />
+      </svg>
+    ),
+  },
+  SYSTEM: {
+    iconBg: "#F8FAFC",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="12" />
+        <line x1="12" y1="16" x2="12.01" y2="16" />
       </svg>
     ),
   },
@@ -63,9 +94,21 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  function fetchNotifications() {
     apiGet<Notification[]>("/notifications").then(setNotifications).catch(() => {});
+  }
+
+  // Initial fetch + poll every 15 seconds
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 15000);
+    return () => clearInterval(interval);
   }, []);
+
+  // Re-fetch immediately when the dropdown is opened
+  useEffect(() => {
+    if (open) fetchNotifications();
+  }, [open]);
 
   useEffect(() => {
     function onOutside(e: MouseEvent) {
@@ -123,7 +166,7 @@ export default function NotificationBell() {
           ) : (
             <div className="max-h-80 overflow-y-auto">
               {notifications.slice(0, 10).map((n) => {
-                const meta = TYPE_META[n.type] ?? TYPE_META.APPOINTMENT_CONFIRMED;
+                const meta = TYPE_META[n.type] ?? TYPE_META.SYSTEM;
                 return (
                   <div
                     key={n.id}

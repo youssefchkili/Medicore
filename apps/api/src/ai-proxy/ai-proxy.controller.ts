@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { AiProxyService } from './ai-proxy.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -39,6 +40,7 @@ export class AiProxyController {
   // Protected by X-Internal-Secret header — not a Supabase JWT
   @Post('webhook/diagnostic-complete')
   @UseGuards(InternalSecretGuard)
+  @SkipThrottle()
   @HttpCode(HttpStatus.OK)
   handleDiagnosticComplete(@Body() dto: DiagnosticWebhookDto) {
     return this.aiProxyService.handleDiagnosticComplete(dto);
@@ -58,6 +60,7 @@ export class AiProxyController {
   @Post('face/enroll')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.DOCTOR)
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   enrollFace(
     @CurrentUser() user: Profile & { doctor: Doctor | null },
     @Req() req: FastifyRequest,
@@ -74,6 +77,7 @@ export class AiProxyController {
   @Post('face/verify')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.DOCTOR)
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   verifyFace(
     @CurrentUser() user: Profile & { doctor: Doctor | null },
     @Req() req: FastifyRequest,

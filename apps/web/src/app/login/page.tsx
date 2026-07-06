@@ -330,7 +330,7 @@ export default function LoginPage() {
       }
     }
 
-    // For doctors: check if they have face biometric enrolled — if so, require 2FA
+    // For doctors: check profile status and face biometric
     if (metaRole === "doctor" && data.session) {
       try {
         const profileRes = await fetch(
@@ -338,12 +338,24 @@ export default function LoginPage() {
           { headers: { Authorization: `Bearer ${data.session.access_token}` } }
         );
         if (profileRes.ok) {
-          const profile = await profileRes.json() as { doctor?: { faceRegistered?: boolean } };
+          const profile = await profileRes.json() as {
+            isActive?: boolean;
+            doctor?: { faceRegistered?: boolean };
+          };
+
+          // Doctor pending admin approval — send to waiting page
+          if (profile.isActive === false) {
+            router.push("/dashboard/doctor/pending");
+            router.refresh();
+            return;
+          }
+
+          // Doctor has face biometric enrolled — require 2FA
           if (profile.doctor?.faceRegistered) {
             setPendingRoute(DASHBOARD_ROUTES[metaRole]);
             setFaceVerifyToken(data.session.access_token);
             setLoading(false);
-            return; // Wait for face verification
+            return;
           }
         }
       } catch { /* non-fatal: fall through to normal redirect */ }
@@ -488,8 +500,8 @@ export default function LoginPage() {
           <p className="font-heading font-semibold text-xs text-[#64748B] uppercase tracking-[0.5px] mb-2.5">
             I am a
           </p>
-          <div className="grid grid-cols-3 gap-2">
-            {(["patient", "doctor", "admin"] as Role[]).map((r) => (
+          <div className="grid grid-cols-2 gap-2">
+            {(["patient", "doctor"] as Role[]).map((r) => (
               <RoleButton
                 key={r}
                 active={role === r}
@@ -628,15 +640,7 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        {/* Dashboard preview links */}
-        <div className="px-4 py-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-center">
-          <span className="text-xs text-[#94A3B8]">Preview dashboards: </span>
-          <Link href="/dashboard/patient" className="font-heading font-semibold text-xs text-[#2563EB] mx-1.5 hover:underline">Patient</Link>
-          <span className="text-[#CBD5E1]">·</span>
-          <Link href="/dashboard/doctor" className="font-heading font-semibold text-xs text-[#7C3AED] mx-1.5 hover:underline">Doctor</Link>
-          <span className="text-[#CBD5E1]">·</span>
-          <Link href="/dashboard/admin" className="font-heading font-semibold text-xs text-[#D97706] mx-1.5 hover:underline">Admin</Link>
-        </div>
+        
       </div>
     </div>
 

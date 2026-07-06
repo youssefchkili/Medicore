@@ -1,4 +1,4 @@
-import { IsEnum, IsString, MinLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
 import { Role } from '@prisma/client';
 
 // id is intentionally removed — it is taken from the verified JWT, not the request body
@@ -13,4 +13,13 @@ export class SyncProfileDto {
 
   @IsEnum(Role)
   role: Role;
+
+  // Doctor-only fields — used to create the Doctor record on first sync
+  @IsOptional()
+  @IsString()
+  specialty?: string;
+
+  @IsOptional()
+  @IsString()
+  licenseNumber?: string;
 }

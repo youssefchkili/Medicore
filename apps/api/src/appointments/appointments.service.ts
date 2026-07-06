@@ -2,13 +2,15 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { BookAppointmentDto } from './dto/book-appointment.dto';
 import { CancelAppointmentDto } from './dto/cancel-appointment.dto';
 import { CreateSlotDto } from './dto/create-slot.dto';
-import { AppointmentStatus, Role } from '@prisma/client';
+import { AppointmentStatus, NotificationType, Role } from '@prisma/client';
 import type { Profile } from '@prisma/client';
 
 const APPOINTMENT_INCLUDE = {
@@ -20,7 +22,12 @@ const APPOINTMENT_INCLUDE = {
 
 @Injectable()
 export class AppointmentsService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(AppointmentsService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private notifications: NotificationsService,
+  ) {}
 
   // ─── Availability slots ────────────────────────────────────────────────────
 
@@ -123,7 +130,7 @@ export class AppointmentsService {
     if (!patient) throw new NotFoundException('Patient record not found');
 
     // Use a transaction to prevent double-booking
-    return this.prisma.$transaction(async (tx) => {
+    const appointment = await this.prisma.$transaction(async (tx) => {
       const slot = await tx.availabilitySlot.findUnique({
         where: { id: dto.slotId },
       });
@@ -154,12 +161,31 @@ export class AppointmentsService {
         include: APPOINTMENT_INCLUDE,
       });
     });
+
+    const patientName = `${appointment.patient.profile.firstName} ${appointment.patient.profile.lastName}`;
+    const date = new Date(appointment.scheduledAt).toLocaleString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+    this.notifications.send({
+      recipientId: appointment.doctor.profile.id,
+      type: NotificationType.APPOINTMENT_BOOKED,
+      title: 'New appointment booked',
+      body: `${patientName} has booked an appointment with you on ${date}.`,
+      data: { appointmentId: appointment.id },
+    }).catch((err) => this.logger.error('Failed to send APPOINTMENT_BOOKED notification', err));
+
+    return appointment;
   }
 
   async cancel(profile: Profile, id: string, dto: CancelAppointmentDto) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
-      include: { slot: true },
+      include: {
+        slot: true,
+        patient: { include: { profile: true } },
+        doctor: { include: { profile: true } },
+      },
     });
     if (!appointment) throw new NotFoundException('Appointment not found');
     this.assertParticipant(profile, appointment);
@@ -171,7 +197,7 @@ export class AppointmentsService {
       throw new BadRequestException(`Cannot cancel a ${appointment.status.toLowerCase()} appointment`);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const cancelled = await this.prisma.$transaction(async (tx) => {
       await tx.availabilitySlot.update({
         where: { id: appointment.slotId },
         data: { isBooked: false },
@@ -185,23 +211,72 @@ export class AppointmentsService {
         include: APPOINTMENT_INCLUDE,
       });
     });
+
+    const date = new Date(appointment.scheduledAt).toLocaleString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+
+    if (profile.role === Role.PATIENT) {
+      const patientName = `${appointment.patient.profile.firstName} ${appointment.patient.profile.lastName}`;
+      this.notifications.send({
+        recipientId: appointment.doctor.profile.id,
+        type: NotificationType.APPOINTMENT_CANCELLED,
+        title: 'Appointment cancelled by patient',
+        body: `${patientName} cancelled their appointment scheduled for ${date}.`,
+        data: { appointmentId: id },
+      }).catch((err) => this.logger.error('Failed to send APPOINTMENT_CANCELLED (doctor) notification', err));
+    } else {
+      const doctorName = `Dr. ${appointment.doctor.profile.firstName} ${appointment.doctor.profile.lastName}`;
+      this.notifications.send({
+        recipientId: appointment.patient.profile.id,
+        type: NotificationType.APPOINTMENT_CANCELLED,
+        title: 'Appointment cancelled',
+        body: `${doctorName} cancelled your appointment scheduled for ${date}.`,
+        data: { appointmentId: id },
+      }).catch((err) => this.logger.error('Failed to send APPOINTMENT_CANCELLED (patient) notification', err));
+    }
+
+    return cancelled;
   }
 
   async confirm(profile: Profile, id: string) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
-      include: { doctor: true },
+      include: {
+        doctor: { include: { profile: true } },
+        patient: { include: { profile: true } },
+      },
     });
     if (!appointment) throw new NotFoundException('Appointment not found');
     if (appointment.doctor.profileId !== profile.id) throw new ForbiddenException();
     if (appointment.status !== AppointmentStatus.SCHEDULED)
       throw new BadRequestException('Only scheduled appointments can be confirmed');
 
-    return this.prisma.appointment.update({
+    const videoRoomUrl =
+      appointment.type === 'ONLINE' ? `https://meet.jit.si/medicore-${id}` : null;
+
+    const confirmed = await this.prisma.appointment.update({
       where: { id },
-      data: { status: AppointmentStatus.CONFIRMED },
+      data: { status: AppointmentStatus.CONFIRMED, videoRoomUrl },
       include: APPOINTMENT_INCLUDE,
     });
+
+    const doctorName = `Dr. ${appointment.doctor.profile.firstName} ${appointment.doctor.profile.lastName}`;
+    const date = new Date(appointment.scheduledAt).toLocaleString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+    const extra = videoRoomUrl ? ' Your meeting link is ready.' : '';
+    this.notifications.send({
+      recipientId: appointment.patient.profile.id,
+      type: NotificationType.APPOINTMENT_CONFIRMED,
+      title: 'Appointment confirmed',
+      body: `${doctorName} confirmed your appointment on ${date}.${extra}`,
+      data: { appointmentId: id, videoRoomUrl },
+    }).catch((err) => this.logger.error('Failed to send APPOINTMENT_CONFIRMED notification', err));
+
+    return confirmed;
   }
 
   // ─── Helper ────────────────────────────────────────────────────────────────

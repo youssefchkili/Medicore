@@ -40,6 +40,13 @@ export class AdminController {
     return this.adminService.toggleUser(actor.id, id);
   }
 
+  // ─── Doctor approval ───────────────────────────────────────────────────────
+
+  @Get('doctors/pending')
+  getPendingDoctors() {
+    return this.adminService.getPendingDoctors();
+  }
+
   @Post('doctors/approve/:profileId')
   approveDoctor(
     @CurrentUser() actor: Profile,
@@ -47,6 +54,15 @@ export class AdminController {
   ) {
     return this.adminService.approveDoctor(actor.id, profileId);
   }
+
+  // ─── Appointments ──────────────────────────────────────────────────────────
+
+  @Get('appointments')
+  getAllAppointments(@Query('limit') limit?: string) {
+    return this.adminService.getAllAppointments(limit ? parseInt(limit, 10) : 50);
+  }
+
+  // ─── Audit logs ────────────────────────────────────────────────────────────
 
   @Get('audit-logs')
   getAuditLogs(@Query('limit') limit?: string) {

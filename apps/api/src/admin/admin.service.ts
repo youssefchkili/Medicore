@@ -5,6 +5,20 @@ import { PrismaService } from '../prisma/prisma.service';
 export class AdminService {
   constructor(private prisma: PrismaService) {}
 
+  // ─── Stats ─────────────────────────────────────────────────────────────────
+
+  async getStats() {
+    const [patients, doctors, pendingDoctors, appointments, diagnostics] =
+      await Promise.all([
+        this.prisma.patient.count(),
+        this.prisma.doctor.count({ where: { profile: { isActive: true } } }),
+        this.prisma.profile.count({ where: { role: 'DOCTOR', isActive: false } }),
+        this.prisma.appointment.count(),
+        this.prisma.preDiagnostic.count(),
+      ]);
+    return { patients, doctors, pendingDoctors, appointments, diagnostics };
+  }
+
   // ─── User management ───────────────────────────────────────────────────────
 
   getUsers(role?: string) {
@@ -38,25 +52,50 @@ export class AdminService {
     return updated;
   }
 
-  async approveDoctor(actorId: string, profileId: string) {
-    const doctor = await this.prisma.doctor.findUnique({
-      where: { profileId },
+  // ─── Doctor approval ───────────────────────────────────────────────────────
+
+  getPendingDoctors() {
+    return this.prisma.profile.findMany({
+      where: { role: 'DOCTOR', isActive: false },
+      include: { doctor: { include: { specialty: true } } },
+      orderBy: { createdAt: 'desc' },
     });
-    if (!doctor) throw new NotFoundException('Doctor not found');
+  }
+
+  async approveDoctor(actorId: string, profileId: string) {
+    const profile = await this.prisma.profile.findUnique({
+      where: { id: profileId },
+    });
+    if (!profile || (profile.role as string) !== 'DOCTOR') {
+      throw new NotFoundException('Doctor profile not found');
+    }
 
     await this.prisma.auditLog.create({
       data: {
         actorId,
         action: 'DOCTOR_APPROVED',
         resourceType: 'Doctor',
-        resourceId: doctor.id,
+        resourceId: profileId,
       },
     });
 
     return this.prisma.profile.update({
       where: { id: profileId },
       data: { isActive: true },
-      include: { doctor: true },
+      include: { doctor: { include: { specialty: true } } },
+    });
+  }
+
+  // ─── Appointments ──────────────────────────────────────────────────────────
+
+  getAllAppointments(limit = 50) {
+    return this.prisma.appointment.findMany({
+      include: {
+        patient: { include: { profile: true } },
+        doctor: { include: { profile: true, specialty: true } },
+      },
+      orderBy: { scheduledAt: 'desc' },
+      take: limit,
     });
   }
 
@@ -65,22 +104,12 @@ export class AdminService {
   getAuditLogs(limit = 100) {
     return this.prisma.auditLog.findMany({
       include: {
-        actor: { select: { id: true, firstName: true, lastName: true, role: true } },
+        actor: {
+          select: { id: true, firstName: true, lastName: true, role: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
-  }
-
-  // ─── Stats ─────────────────────────────────────────────────────────────────
-
-  async getStats() {
-    const [patients, doctors, appointments, diagnostics] = await Promise.all([
-      this.prisma.patient.count(),
-      this.prisma.doctor.count(),
-      this.prisma.appointment.count(),
-      this.prisma.preDiagnostic.count(),
-    ]);
-    return { patients, doctors, appointments, diagnostics };
   }
 }

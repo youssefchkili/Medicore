@@ -5,12 +5,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/client";
 
-type Role = "patient" | "doctor" | "admin";
+type Role = "patient" | "doctor";
 
 const DASHBOARD_ROUTES: Record<Role, string> = {
   patient: "/dashboard/patient",
   doctor: "/dashboard/doctor",
-  admin: "/dashboard/admin",
 };
 
 function parseAuthError(err: { message?: string; code?: string }): string {
@@ -253,15 +252,6 @@ export default function RegisterPage() {
       label: "Doctor",
       description: "Manage consultations & patient records",
     },
-    admin: {
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-          <path d="M12 3L4 7v5c0 4.6 3.5 8.9 8 10 4.5-1.1 8-5.4 8-10V7L12 3z" />
-        </svg>
-      ),
-      label: "Admin",
-      description: "Oversee platform & manage users",
-    },
   };
 
   async function handleSubmit(e: React.FormEvent) {
@@ -299,7 +289,7 @@ export default function RegisterPage() {
     }
 
     // If Supabase returned a session the account is auto-confirmed —
-    // sync the profile to the DB then go straight to the dashboard
+    // sync the profile to the DB then redirect accordingly
     if (signUpData.session) {
       const nameParts = fullName.trim().split(/\s+/);
       const firstName = nameParts[0];
@@ -311,12 +301,19 @@ export default function RegisterPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${signUpData.session.access_token}`,
           },
-          body: JSON.stringify({ firstName, lastName, role: role.toUpperCase() }),
+          body: JSON.stringify({
+            firstName,
+            lastName,
+            role: role.toUpperCase(),
+            // Pass doctor fields so the Doctor record is created immediately
+            ...(role === "doctor" && { specialty, licenseNumber }),
+          }),
         });
       } catch {
         // Non-fatal: profile sync can be retried; don't block navigation
       }
-      router.push(DASHBOARD_ROUTES[role]);
+      // Doctors are pending approval — send them to the waiting page
+      router.push(role === "doctor" ? "/dashboard/doctor/pending" : DASHBOARD_ROUTES[role]);
       router.refresh();
       return;
     }
@@ -357,7 +354,7 @@ export default function RegisterPage() {
           </div>
 
           <div className="flex flex-col gap-3 mb-8">
-            {(["patient", "doctor", "admin"] as Role[]).map((r) => (
+            {(["patient", "doctor"] as Role[]).map((r) => (
               <RoleButton
                 key={r}
                 active={role === r}
@@ -379,21 +376,6 @@ export default function RegisterPage() {
               <p className="text-xs text-[#0369A1] leading-relaxed">
                 Doctor accounts require verification. Please have your medical
                 license number ready. Your account will be reviewed within 24 hours.
-              </p>
-            </div>
-          )}
-
-          {/* Admin note */}
-          {role === "admin" && (
-            <div className="flex items-start gap-3 px-4 py-3.5 rounded-[14px] bg-[#FFFBEB] border border-[#FDE68A] mb-6">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="1.8" className="flex-shrink-0 mt-0.5">
-                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                <line x1="12" y1="9" x2="12" y2="13" />
-                <line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
-              <p className="text-xs text-[#92400E] leading-relaxed">
-                Admin accounts are restricted. Contact your platform administrator
-                to get access credentials.
               </p>
             </div>
           )}
