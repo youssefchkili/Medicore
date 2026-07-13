@@ -40,10 +40,15 @@ export default function ChatPage() {
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const statusRef = useRef(status);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   const startSession = useCallback(async () => {
     setStatus("connecting");
@@ -136,7 +141,7 @@ export default function ChatPage() {
       };
 
       ws.onclose = (e) => {
-        if (e.code !== 1000 && status !== "completed") {
+        if (e.code !== 1000 && statusRef.current !== "completed") {
           setStatus("error");
           setError("Connection closed unexpectedly.");
         }
@@ -145,7 +150,7 @@ export default function ChatPage() {
       setStatus("error");
       setError(err instanceof Error ? err.message : "Failed to start chat session.");
     }
-  }, [status]);
+  }, []);
 
   useEffect(() => {
     startSession();

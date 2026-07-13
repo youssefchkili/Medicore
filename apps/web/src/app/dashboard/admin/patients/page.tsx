@@ -23,8 +23,13 @@ export default function AdminPatientsPage() {
   const [actionId, setActionId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const data = await apiGet<PatientProfile[]>("/admin/users?role=PATIENT").catch(() => []);
-    setPatients(data);
+    try {
+      const data = await apiGet<PatientProfile[]>("/admin/users?role=PATIENT");
+      setPatients(data);
+    } catch {
+      // Keep the existing list on a transient refresh failure so it doesn't
+      // wipe out the visible effect of a mutation that just succeeded.
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);

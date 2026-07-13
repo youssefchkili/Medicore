@@ -45,7 +45,7 @@ export default function DoctorAppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("All");
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<Set<string>>(new Set());
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [error, setError] = useState("");
@@ -67,31 +67,40 @@ export default function DoctorAppointmentsPage() {
   });
 
   async function handleConfirm(id: string) {
-    setActionLoading(id);
+    setActionLoading((prev) => new Set(prev).add(id));
     try {
       const updated = await apiPatch<Appointment>(`/appointments/${id}/confirm`);
       setAppointments((prev) => prev.map((a) => (a.id === id ? updated : a)));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to confirm");
     } finally {
-      setActionLoading(null);
+      setActionLoading((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }
 
   async function handleCancel() {
     if (!cancelId) return;
-    setActionLoading(cancelId);
+    const id = cancelId;
+    setActionLoading((prev) => new Set(prev).add(id));
     try {
-      const updated = await apiPatch<Appointment>(`/appointments/${cancelId}/cancel`, {
+      const updated = await apiPatch<Appointment>(`/appointments/${id}/cancel`, {
         reason: cancelReason || undefined,
       });
-      setAppointments((prev) => prev.map((a) => (a.id === cancelId ? updated : a)));
+      setAppointments((prev) => prev.map((a) => (a.id === id ? updated : a)));
       setCancelId(null);
       setCancelReason("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to cancel");
     } finally {
-      setActionLoading(null);
+      setActionLoading((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }
 
@@ -202,10 +211,10 @@ export default function DoctorAppointmentsPage() {
                     {a.status === "SCHEDULED" && !isPast && (
                       <button
                         onClick={() => handleConfirm(a.id)}
-                        disabled={actionLoading === a.id}
+                        disabled={actionLoading.has(a.id)}
                         className="px-3 py-1.5 rounded-[8px] font-heading font-semibold text-[12px] text-white bg-[#059669] hover:bg-[#047857] transition-colors disabled:opacity-60"
                       >
-                        {actionLoading === a.id ? "…" : "Confirm"}
+                        {actionLoading.has(a.id) ? "…" : "Confirm"}
                       </button>
                     )}
                     {a.status === "CONFIRMED" && a.videoRoomUrl && (
@@ -264,10 +273,10 @@ export default function DoctorAppointmentsPage() {
               </button>
               <button
                 onClick={handleCancel}
-                disabled={!!actionLoading}
+                disabled={!!cancelId && actionLoading.has(cancelId)}
                 className="flex-1 py-3 rounded-[12px] font-heading font-semibold text-[14px] text-white bg-[#E11D48] hover:bg-[#BE123C] transition-colors disabled:opacity-60"
               >
-                {actionLoading ? "Cancelling…" : "Cancel Appointment"}
+                {cancelId && actionLoading.has(cancelId) ? "Cancelling…" : "Cancel Appointment"}
               </button>
             </div>
           </div>

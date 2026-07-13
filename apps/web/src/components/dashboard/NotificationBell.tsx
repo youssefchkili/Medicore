@@ -93,9 +93,17 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const ref = useRef<HTMLDivElement>(null);
+  // Guards against a slow poll response landing after a newer fetch or a
+  // local mutation (e.g. markAllRead) and silently reverting the UI.
+  const requestSeq = useRef(0);
 
   function fetchNotifications() {
-    apiGet<Notification[]>("/notifications").then(setNotifications).catch(() => {});
+    const seq = ++requestSeq.current;
+    apiGet<Notification[]>("/notifications")
+      .then((data) => {
+        if (seq === requestSeq.current) setNotifications(data);
+      })
+      .catch(() => {});
   }
 
   // Initial fetch + poll every 15 seconds
@@ -121,8 +129,15 @@ export default function NotificationBell() {
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   async function markAllRead() {
-    await apiPatch("/notifications/read-all").catch(() => {});
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    try {
+      await apiPatch("/notifications/read-all");
+      // Invalidate any fetch already in flight before this mutation so its
+      // (now stale) response can't overwrite the optimistic update below.
+      requestSeq.current++;
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    } catch {
+      // Leave notifications as-is on failure; the next poll will reconcile.
+    }
   }
 
   return (

@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/client";
+import { apiGet } from "@/lib/api";
 
 type NavItem = {
   label: string;
@@ -15,6 +17,18 @@ export default function DoctorSidebar({ userName }: { userName: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const initial = userName ? userName.charAt(0).toUpperCase() : "?";
+  const [pendingReviews, setPendingReviews] = useState(0);
+
+  useEffect(() => {
+    const fetchPending = () => {
+      apiGet<unknown[]>("/diagnostics?pending=true")
+        .then((data) => setPendingReviews(data.length))
+        .catch(() => {});
+    };
+    fetchPending();
+    const interval = setInterval(fetchPending, 20000);
+    return () => clearInterval(interval);
+  }, []);
 
   const navItems: NavItem[] = [
     {
@@ -64,7 +78,7 @@ export default function DoctorSidebar({ userName }: { userName: string }) {
           <line x1="8" y1="17" x2="16" y2="17" />
         </svg>
       ),
-      badge: { text: "3", color: "#fff", bg: "#EF4444" },
+      badge: pendingReviews > 0 ? { text: String(pendingReviews), color: "#fff", bg: "#EF4444" } : undefined,
     },
     {
       label: "Availability",

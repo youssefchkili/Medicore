@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { apiGet } from "@/lib/api";
 import NotificationBell from "@/components/dashboard/NotificationBell";
@@ -55,6 +55,7 @@ export default function BrowseDoctorsPage() {
   const [search, setSearch] = useState("");
   const [selectedSpecialty, setSelectedSpecialty] = useState("");
   const [availableOnly, setAvailableOnly] = useState(false);
+  const requestSeq = useRef(0);
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long", month: "long", day: "numeric", year: "numeric",
@@ -65,15 +66,22 @@ export default function BrowseDoctorsPage() {
   }, []);
 
   useEffect(() => {
+    const seq = ++requestSeq.current;
     setLoading(true);
     const params = new URLSearchParams();
     if (selectedSpecialty) params.set("specialty", selectedSpecialty);
     if (availableOnly) params.set("available", "true");
     const query = params.toString();
     apiGet<Doctor[]>(`/users/doctors${query ? `?${query}` : ""}`)
-      .then(setDoctors)
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (seq === requestSeq.current) setDoctors(data);
+      })
+      .catch((err: Error) => {
+        if (seq === requestSeq.current) setError(err.message);
+      })
+      .finally(() => {
+        if (seq === requestSeq.current) setLoading(false);
+      });
   }, [selectedSpecialty, availableOnly]);
 
   const filtered = search
@@ -121,7 +129,7 @@ export default function BrowseDoctorsPage() {
           >
             <option value="">All Specialties</option>
             {specialties.map((s) => (
-              <option key={s.id} value={s.name}>{s.name}</option>
+              <option key={s.id} value={s.slug}>{s.name}</option>
             ))}
           </select>
 
@@ -160,12 +168,12 @@ export default function BrowseDoctorsPage() {
             {specialties.slice(0, 8).map((s) => (
               <button
                 key={s.id}
-                onClick={() => setSelectedSpecialty(selectedSpecialty === s.name ? "" : s.name)}
+                onClick={() => setSelectedSpecialty(selectedSpecialty === s.slug ? "" : s.slug)}
                 className="px-4 py-1.5 rounded-full font-heading font-semibold text-[12px] whitespace-nowrap transition-colors flex-shrink-0"
                 style={{
-                  background: selectedSpecialty === s.name ? "#2563EB" : "#F8FAFC",
-                  color: selectedSpecialty === s.name ? "#fff" : "#64748B",
-                  border: selectedSpecialty === s.name ? "none" : "1px solid #E2E8F0",
+                  background: selectedSpecialty === s.slug ? "#2563EB" : "#F8FAFC",
+                  color: selectedSpecialty === s.slug ? "#fff" : "#64748B",
+                  border: selectedSpecialty === s.slug ? "none" : "1px solid #E2E8F0",
                 }}
               >
                 {s.name}

@@ -3,8 +3,10 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.agents.graph import graph
 from app.db.client import (
     fetch_chat_session,
+    fetch_patient_id_by_profile,
     insert_message,
     update_chat_session,
+    verify_jwt,
 )
 
 logger = logging.getLogger(__name__)
@@ -54,6 +56,13 @@ async def chat_ws(websocket: WebSocket, session_id: str):
     """
     await websocket.accept()
 
+    token = websocket.query_params.get("token")
+    user = await verify_jwt(token) if token else None
+    if not user:
+        await websocket.send_json({"type": "error", "message": "Unauthorized"})
+        await websocket.close(code=4401)
+        return
+
     try:
         session_row = await fetch_chat_session(session_id)
         if not session_row:
@@ -62,6 +71,13 @@ async def chat_ws(websocket: WebSocket, session_id: str):
             return
 
         patient_id: str = session_row["patient_id"]
+
+        owner_patient_id = await fetch_patient_id_by_profile(user["id"])
+        if not owner_patient_id or owner_patient_id != patient_id:
+            await websocket.send_json({"type": "error", "message": "Forbidden"})
+            await websocket.close(code=4403)
+            return
+
         thread_id: str = session_row["langgraph_thread_id"]
 
         # Restore state: in-memory cache → Supabase agent_state → fresh

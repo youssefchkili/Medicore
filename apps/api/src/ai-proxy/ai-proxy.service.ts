@@ -77,6 +77,33 @@ export class AiProxyService {
       data: { preDiagnosticId: dto.preDiagnosticId, urgency: dto.urgency },
     });
 
+    // Escalate HIGH/EMERGENCY cases to active doctors immediately instead of
+    // leaving them to be discovered whenever someone happens to poll the
+    // pending-review queue. Specialty is a free-text AI suggestion that
+    // doesn't reliably match the Specialty table, so this broadcasts to all
+    // active doctors rather than risking a missed match on an urgent case.
+    if (dto.urgency === 'HIGH' || dto.urgency === 'EMERGENCY') {
+      const activeDoctors = await this.prisma.doctor.findMany({
+        where: { status: 'ACTIVE' },
+        select: { profileId: true },
+      });
+      const patientName = `${diagnostic.patient.profile.firstName} ${diagnostic.patient.profile.lastName}`;
+      const isEmergency = dto.urgency === 'EMERGENCY';
+      await Promise.all(
+        activeDoctors.map((d) =>
+          this.notifications.send({
+            recipientId: d.profileId,
+            type: NotificationType.SYSTEM,
+            title: isEmergency ? '🚨 Emergency case awaiting review' : '⚡ High-urgency case awaiting review',
+            body: isEmergency
+              ? `EMERGENCY case reported by ${patientName} — review immediately.`
+              : `High-urgency case reported by ${patientName} needs prompt review.`,
+            data: { preDiagnosticId: dto.preDiagnosticId, urgency: dto.urgency },
+          }),
+        ),
+      );
+    }
+
     // Mark ChatSession as completed
     await this.prisma.chatSession.update({
       where: { id: diagnostic.chatSessionId },

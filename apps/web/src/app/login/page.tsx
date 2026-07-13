@@ -311,7 +311,10 @@ export default function LoginPage() {
 
     // Ensure the profile row exists in the DB (upsert is idempotent).
     // Always call sync-profile so the profile is created even when fullName is missing.
-    if (data.session) {
+    // ADMIN is intentionally excluded — the backend rejects it as a self-registerable
+    // role (admin accounts are provisioned directly in the DB), so calling for admins
+    // would only ever 400.
+    if (data.session && metaRole !== "admin") {
       const fullName: string = data.user?.user_metadata?.full_name || "";
       const nameParts = fullName.trim().split(/\s+/);
       const firstName = nameParts[0] || data.user?.email?.split("@")[0] || "User";

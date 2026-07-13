@@ -1,7 +1,11 @@
+import logging
+
 import numpy as np
 import cv2
 from deepface import DeepFace
 from ..config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def _decode_image(image_bytes: bytes) -> np.ndarray:
@@ -39,7 +43,8 @@ def extract_embedding(image_bytes: bytes) -> tuple[list[float], float]:
     embedding: list[float] = results[0]["embedding"]
 
     # Anti-spoofing — available in DeepFace >= 0.0.83
-    # Falls back to 1.0 (pass) if the model or parameter is unavailable
+    # Fails closed (0.0 = reject) if the model or parameter is unavailable, since
+    # silently trusting an unverifiable check would defeat the point of spoof detection.
     try:
         analysis = DeepFace.analyze(
             img_path=img,
@@ -49,9 +54,10 @@ def extract_embedding(image_bytes: bytes) -> tuple[list[float], float]:
             silent=True,
         )
         raw = analysis[0] if isinstance(analysis, list) else analysis
-        anti_spoof_score = float(raw.get("antispoof_score", 1.0))
-    except Exception:
-        anti_spoof_score = 1.0
+        anti_spoof_score = float(raw.get("antispoof_score", 0.0))
+    except Exception as e:
+        logger.warning("Anti-spoofing check failed, rejecting as unverified: %s", e)
+        anti_spoof_score = 0.0
 
     return embedding, anti_spoof_score
 

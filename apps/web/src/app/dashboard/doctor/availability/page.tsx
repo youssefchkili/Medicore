@@ -35,7 +35,7 @@ function groupByDate(slots: Slot[]): Record<string, Slot[]> {
 export default function DoctorAvailabilityPage() {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [showForm, setShowForm] = useState(false);
   const [formDate, setFormDate] = useState("");
   const [formStart, setFormStart] = useState("09:00");
@@ -58,14 +58,18 @@ export default function DoctorAvailabilityPage() {
   }, []);
 
   async function handleDelete(id: string) {
-    setDeletingId(id);
+    setDeletingIds((prev) => new Set(prev).add(id));
     try {
       await apiDelete(`/availability/${id}`);
       setSlots((prev) => prev.filter((s) => s.id !== id));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to delete slot");
     } finally {
-      setDeletingId(null);
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   }
 
@@ -203,11 +207,11 @@ export default function DoctorAvailabilityPage() {
                         {!slot.isBooked && (
                           <button
                             onClick={() => handleDelete(slot.id)}
-                            disabled={deletingId === slot.id}
+                            disabled={deletingIds.has(slot.id)}
                             className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#FFF1F2] transition-colors disabled:opacity-50"
                             title="Delete slot"
                           >
-                            {deletingId === slot.id ? (
+                            {deletingIds.has(slot.id) ? (
                               <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="#E11D48" strokeWidth="4" />
                                 <path className="opacity-75" fill="#E11D48" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />

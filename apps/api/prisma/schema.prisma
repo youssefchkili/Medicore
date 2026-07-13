@@ -48,6 +48,12 @@ enum DiagnosticStatus {
   ARCHIVED
 }
 
+enum DoctorStatus {
+  PENDING
+  ACTIVE
+  DEACTIVATED
+}
+
 enum AppointmentType {
   ONLINE
   IN_PERSON
@@ -138,10 +144,11 @@ model Doctor {
   bio              String?
   yearsExperience  Int?     @map("years_experience")
   consultationFee  Decimal? @map("consultation_fee") @db.Decimal(10, 2)
-  isAvailable      Boolean  @default(true) @map("is_available")
+  isAvailable      Boolean      @default(true) @map("is_available")
   rating           Float?
-  faceRegistered   Boolean  @default(false) @map("face_registered")
-  createdAt        DateTime @default(now()) @map("created_at")
+  faceRegistered   Boolean      @default(false) @map("face_registered")
+  status           DoctorStatus @default(PENDING)
+  createdAt        DateTime     @default(now()) @map("created_at")
 
   profile           Profile            @relation(fields: [profileId], references: [id], onDelete: Cascade)
   specialty         Specialty          @relation(fields: [specialtyId], references: [id])

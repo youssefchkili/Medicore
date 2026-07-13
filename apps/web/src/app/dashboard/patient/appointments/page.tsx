@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { apiGet, apiPost, apiPatch } from "@/lib/api";
 import NotificationBell from "@/components/dashboard/NotificationBell";
 
@@ -74,6 +74,7 @@ function BookingModal({ onClose, onBooked }: { onClose: () => void; onBooked: ()
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [searchSpecialty, setSearchSpecialty] = useState("");
+  const selectedDoctorIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     apiGet<SlotDoctor[]>("/users/doctors?available=true").then(setDoctors).catch(() => {});
@@ -83,15 +84,17 @@ function BookingModal({ onClose, onBooked }: { onClose: () => void; onBooked: ()
     setLoading(true);
     try {
       const data = await apiGet<AvailabilitySlot[]>(`/availability/${doctorId}`);
+      if (selectedDoctorIdRef.current !== doctorId) return;
       setSlots(data.filter((s) => !s.isBooked));
     } catch {
-      setError("Failed to load slots.");
+      if (selectedDoctorIdRef.current === doctorId) setError("Failed to load slots.");
     } finally {
-      setLoading(false);
+      if (selectedDoctorIdRef.current === doctorId) setLoading(false);
     }
   }
 
   function selectDoctor(doc: SlotDoctor) {
+    selectedDoctorIdRef.current = doc.id;
     setSelectedDoctor(doc);
     loadSlots(doc.id);
     setStep("slots");

@@ -3,22 +3,31 @@
 import { useState, useEffect } from "react";
 import { apiGet, apiPatch } from "@/lib/api";
 import NotificationBell from "@/components/dashboard/NotificationBell";
+import { parseAiReport, DEFAULT_AI_DISCLAIMER } from "@/lib/parseAiReport";
 
 type DiagnosticStatus = "PENDING_REVIEW" | "REVIEWED" | "ARCHIVED";
 type Urgency = "LOW" | "MEDIUM" | "HIGH" | "EMERGENCY";
+type Condition = { condition: string; confidence?: string } | string;
 
 type Diagnostic = {
   id: string;
   status: DiagnosticStatus;
   urgency: Urgency;
-  symptoms: string[];
-  aiSummary: string | null;
+  possibleConditions: Condition[];
+  rawReport: string;
   suggestedSpecialty: string | null;
   doctorNotes: string | null;
   reviewedBy: string | null;
   createdAt: string;
   patient: { profile: { firstName: string; lastName: string } } | null;
 };
+
+function conditionName(c: Condition): string {
+  return typeof c === "string" ? c : c.condition;
+}
+function conditionConfidence(c: Condition): string | null {
+  return typeof c === "string" ? null : (c.confidence ?? null);
+}
 
 const URGENCY_STYLES: Record<Urgency, { label: string; color: string; bg: string; border: string }> = {
   LOW:       { label: "🟢 LOW",       color: "#059669", bg: "#ECFDF5", border: "#6EE7B7" },
@@ -216,20 +225,22 @@ export default function DoctorReviewsPage() {
                           </span>
                         )}
                       </div>
-                      {d.symptoms.length > 0 && (
+                      {Array.isArray(d.possibleConditions) && d.possibleConditions.length > 0 && (
                         <div className="flex gap-1.5 flex-wrap mb-3">
-                          {d.symptoms.slice(0, 5).map((s) => (
-                            <span key={s} className="text-[11px] px-2 py-0.5 rounded-full bg-[#F8FAFC] border border-[#E2E8F0] text-[#64748B]">
-                              {s}
+                          {d.possibleConditions.slice(0, 5).map((c, i) => (
+                            <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-[#F8FAFC] border border-[#E2E8F0] text-[#64748B]">
+                              {conditionName(c)}
                             </span>
                           ))}
-                          {d.symptoms.length > 5 && (
-                            <span className="text-[11px] text-[#94A3B8]">+{d.symptoms.length - 5} more</span>
+                          {d.possibleConditions.length > 5 && (
+                            <span className="text-[11px] text-[#94A3B8]">+{d.possibleConditions.length - 5} more</span>
                           )}
                         </div>
                       )}
-                      {d.aiSummary && (
-                        <p className="text-[13px] text-[#64748B] mb-3 line-clamp-2">{d.aiSummary}</p>
+                      {d.rawReport && (
+                        <p className="text-[13px] text-[#64748B] mb-3 line-clamp-2">
+                          {parseAiReport(d.rawReport).symptomsSummary ?? d.rawReport}
+                        </p>
                       )}
                       {d.doctorNotes && tab === "reviewed" && (
                         <div className="p-3 rounded-xl bg-[#F0FDF4] border border-[#BBF7D0] mb-3">
@@ -276,12 +287,51 @@ export default function DoctorReviewsPage() {
               </button>
             </div>
 
-            {reviewing.aiSummary && (
-              <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] mb-4">
-                <p className="text-[11px] font-heading font-semibold text-[#94A3B8] uppercase mb-1.5">AI Summary</p>
-                <p className="text-[13px] text-[#374151]">{reviewing.aiSummary}</p>
+            {Array.isArray(reviewing.possibleConditions) && reviewing.possibleConditions.length > 0 && (
+              <div className="mb-4">
+                <p className="text-[11px] font-heading font-semibold text-[#94A3B8] uppercase mb-1.5">Possible Conditions</p>
+                <div className="flex gap-1.5 flex-wrap">
+                  {reviewing.possibleConditions.map((c, i) => {
+                    const conf = conditionConfidence(c);
+                    return (
+                      <span key={i} className="text-[12px] px-2.5 py-1 rounded-full bg-[#F8FAFC] border border-[#E2E8F0] text-[#374151]">
+                        {conditionName(c)}{conf && <span className="text-[#94A3B8]"> · {conf}</span>}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
             )}
+
+            {reviewing.rawReport && (() => {
+              const parsed = parseAiReport(reviewing.rawReport);
+              return (
+                <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] mb-4 flex flex-col gap-3">
+                  <div>
+                    <p className="text-[11px] font-heading font-semibold text-[#94A3B8] uppercase mb-1.5">AI Report</p>
+                    <p className="text-[13px] text-[#374151] leading-relaxed whitespace-pre-wrap">
+                      {parsed.symptomsSummary ?? parsed.raw}
+                    </p>
+                  </div>
+                  {parsed.recommendations && (
+                    <div>
+                      <p className="text-[11px] font-heading font-semibold text-[#94A3B8] uppercase mb-1.5">AI Recommendations</p>
+                      <p className="text-[13px] text-[#374151] leading-relaxed">{parsed.recommendations}</p>
+                    </div>
+                  )}
+                  <div className="flex items-start gap-2 px-3 py-2.5 rounded-[10px] bg-[#FFFBEB] border border-[#FDE68A]">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2" className="flex-shrink-0 mt-0.5">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                    <p className="text-[11px] text-[#92400E] leading-relaxed">
+                      {parsed.disclaimer ?? DEFAULT_AI_DISCLAIMER}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="mb-4">
               <label className="block font-heading font-semibold text-[13px] text-[#374151] mb-2">Your Notes</label>

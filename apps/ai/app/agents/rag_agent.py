@@ -1,4 +1,5 @@
 import json
+import logging
 import time
 from typing import List
 from langchain_groq import ChatGroq
@@ -7,6 +8,8 @@ from pydantic import BaseModel, Field
 from app.agents.state import MedicalAgentState
 from app.rag.qdrant_store import get_retriever
 from app.db.client import log_agent_invocation
+
+logger = logging.getLogger(__name__)
 
 
 class RAGOutput(BaseModel):
@@ -94,8 +97,8 @@ async def rag_agent(state: MedicalAgentState) -> dict:
                 tokens_used=tokens,
                 latency_ms=latency_ms,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to log agent invocation for session %s: %s", session_id, e)
 
     return {
         "possible_conditions": result.possible_conditions,

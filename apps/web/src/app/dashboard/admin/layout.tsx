@@ -36,12 +36,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         setUserName(user.user_metadata.full_name as string);
       }
       setAllowed(true);
+    })();
+  }, [router]);
 
+  // Poll pending-doctor count so the sidebar badge doesn't go stale after an
+  // approve/deactivate action on a different page (no shared store to invalidate from).
+  useEffect(() => {
+    if (!allowed) return;
+    const fetchPending = () => {
       apiGet<{ pendingDoctors: number }>("/admin/stats")
         .then((s) => setPendingCount(s.pendingDoctors))
         .catch(() => {});
-    })();
-  }, [router]);
+    };
+    fetchPending();
+    const interval = setInterval(fetchPending, 20000);
+    return () => clearInterval(interval);
+  }, [allowed]);
 
   if (!allowed) return null;
 

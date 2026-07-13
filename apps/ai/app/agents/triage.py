@@ -1,17 +1,26 @@
 import time
-from typing import Optional
+from typing import Optional, Union
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from app.agents.state import MedicalAgentState
 from app.db.client import log_agent_invocation
 
 
 class TriageOutput(BaseModel):
     urgency: str = Field(description="LOW, MEDIUM, HIGH, or EMERGENCY")
-    severity_level: int = Field(description="1-10 scale")
+    # Groq's tool-call schema validation rejects the whole request if the model emits
+    # severity_level as a numeric string against a strict "integer" schema (observed with
+    # llama-3.3-70b-versatile). Accepting both here widens the generated schema so Groq
+    # doesn't 400, and the validator below normalizes back to int for downstream consumers.
+    severity_level: Union[int, str] = Field(description="1-10 scale")
     suggested_specialty: Optional[str] = Field(default=None, description="e.g., 'cardiology'")
     reasoning: str = Field(description="Why this urgency level was chosen")
+
+    @field_validator("severity_level", mode="after")
+    @classmethod
+    def coerce_severity_level(cls, v: Union[int, str]) -> int:
+        return int(v)
 
 
 _llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)

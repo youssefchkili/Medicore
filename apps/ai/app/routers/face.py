@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -50,7 +51,7 @@ async def enroll_face(
     for photo in photos:
         image_bytes = await photo.read()
         try:
-            emb, score = extract_embedding(image_bytes)
+            emb, score = await asyncio.to_thread(extract_embedding, image_bytes)
             embeddings.append(emb)
             anti_spoof_scores.append(score)
         except ValueError as exc:
@@ -59,6 +60,12 @@ async def enroll_face(
     # Average embeddings across all photos → more stable enrollment vector
     avg_embedding: list[float] = np.mean(embeddings, axis=0).tolist()
     avg_anti_spoof = float(np.mean(anti_spoof_scores))
+
+    if avg_anti_spoof < 0.5:
+        raise HTTPException(
+            status_code=422,
+            detail="Anti-spoofing check failed — enrollment must use a live, non-spoofed photo",
+        )
 
     await upsert_face_embedding(
         doctor_id=doctor_id,
@@ -94,7 +101,9 @@ async def verify_face_endpoint(
 
     image_bytes = await photo.read()
     try:
-        probe_embedding, anti_spoof_score = extract_embedding(image_bytes)
+        probe_embedding, anti_spoof_score = await asyncio.to_thread(
+            extract_embedding, image_bytes
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"Face detection failed: {exc}")
 

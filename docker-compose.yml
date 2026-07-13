@@ -27,7 +27,7 @@ services:
     env_file: ./apps/api/.env
     environment:
       - NODE_ENV=development
-    command: sh -c "npx prisma migrate deploy && npm run start:dev"
+    command: sh -c "npx prisma db push && npm run start:dev"
     depends_on:
       - qdrant
     volumes:

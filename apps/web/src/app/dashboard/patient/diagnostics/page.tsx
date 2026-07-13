@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiGet } from "@/lib/api";
 import NotificationBell from "@/components/dashboard/NotificationBell";
+import { downloadDiagnosticPdf } from "@/lib/exportDiagnosticPdf";
+import { parseAiReport, DEFAULT_AI_DISCLAIMER } from "@/lib/parseAiReport";
 
 type Condition = { condition: string; confidence?: string } | string;
 
@@ -58,10 +60,28 @@ function timeAgo(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function DiagnosticModal({ diag, onClose }: { diag: PreDiagnostic; onClose: () => void }) {
+function DiagnosticModal({
+  diag,
+  patientName,
+  onClose,
+}: {
+  diag: PreDiagnostic;
+  patientName: string;
+  onClose: () => void;
+}) {
   const urgency = URGENCY_META[diag.urgency];
   const statusMeta = STATUS_META[diag.status];
   const conditions: Condition[] = Array.isArray(diag.possibleConditions) ? diag.possibleConditions : [];
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      await downloadDiagnosticPdf(diag, patientName);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.45)" }} onClick={onClose}>
@@ -85,11 +105,25 @@ function DiagnosticModal({ diag, onClose }: { diag: PreDiagnostic; onClose: () =
             <h2 className="font-heading font-bold text-[20px] text-[#0F172A]">Diagnostic Report</h2>
             <p className="text-[13px] text-[#94A3B8] mt-0.5">{timeAgo(diag.createdAt)}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-[#F1F5F9] flex items-center justify-center hover:bg-[#E2E8F0] transition-colors">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#EFF6FF] text-[#2563EB] font-heading font-semibold text-[12px] hover:bg-[#DBEAFE] transition-colors disabled:opacity-60"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              {exporting ? "Exporting…" : "Export PDF"}
+            </button>
+            <button onClick={onClose} className="w-8 h-8 rounded-lg bg-[#F1F5F9] flex items-center justify-center hover:bg-[#E2E8F0] transition-colors flex-shrink-0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div className="p-6 flex flex-col gap-5">
@@ -140,12 +174,37 @@ function DiagnosticModal({ diag, onClose }: { diag: PreDiagnostic; onClose: () =
           )}
 
           {/* AI Report */}
-          <div>
-            <p className="font-heading font-semibold text-[12px] text-[#94A3B8] uppercase tracking-wide mb-2">AI Report</p>
-            <div className="px-4 py-4 rounded-[14px] bg-[#F8FAFC] border border-[#E2E8F0] text-[13px] text-[#374151] leading-relaxed whitespace-pre-wrap">
-              {diag.rawReport}
-            </div>
-          </div>
+          {(() => {
+            const parsed = parseAiReport(diag.rawReport);
+            return (
+              <div className="flex flex-col gap-4">
+                <div>
+                  <p className="font-heading font-semibold text-[12px] text-[#94A3B8] uppercase tracking-wide mb-2">AI Report</p>
+                  <div className="px-4 py-4 rounded-[14px] bg-[#F8FAFC] border border-[#E2E8F0] text-[13px] text-[#374151] leading-relaxed whitespace-pre-wrap">
+                    {parsed.symptomsSummary ?? parsed.raw}
+                  </div>
+                </div>
+                {parsed.recommendations && (
+                  <div>
+                    <p className="font-heading font-semibold text-[12px] text-[#94A3B8] uppercase tracking-wide mb-2">Recommendations</p>
+                    <div className="px-4 py-4 rounded-[14px] bg-[#F8FAFC] border border-[#E2E8F0] text-[13px] text-[#374151] leading-relaxed">
+                      {parsed.recommendations}
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-start gap-2.5 px-4 py-3 rounded-[12px] bg-[#FFFBEB] border border-[#FDE68A]">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2" className="flex-shrink-0 mt-0.5">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                  <p className="text-[12px] text-[#92400E] leading-relaxed">
+                    {parsed.disclaimer ?? DEFAULT_AI_DISCLAIMER}
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Doctor review */}
           {diag.status === "REVIEWED" && diag.doctorNotes && (
@@ -190,6 +249,7 @@ export default function DiagnosticsPage() {
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<PreDiagnostic | null>(null);
   const [filter, setFilter] = useState<"all" | "PENDING_REVIEW" | "REVIEWED">("all");
+  const [patientName, setPatientName] = useState("Patient");
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long", month: "long", day: "numeric", year: "numeric",
@@ -200,6 +260,9 @@ export default function DiagnosticsPage() {
       .then(setDiagnostics)
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
+    apiGet<{ firstName: string; lastName: string }>("/users/me")
+      .then((me) => setPatientName(`${me.firstName} ${me.lastName}`))
+      .catch(() => {});
   }, []);
 
   const filtered = filter === "all" ? diagnostics : diagnostics.filter((d) => d.status === filter);
@@ -335,7 +398,7 @@ export default function DiagnosticsPage() {
                   )}
 
                   <p className="text-[12px] text-[#94A3B8] mb-4 line-clamp-2">
-                    {diag.rawReport.slice(0, 120)}…
+                    {(parseAiReport(diag.rawReport).symptomsSummary ?? diag.rawReport).slice(0, 120)}…
                   </p>
 
                   <div className="flex items-center justify-between">
@@ -357,7 +420,9 @@ export default function DiagnosticsPage() {
         )}
       </main>
 
-      {selected && <DiagnosticModal diag={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <DiagnosticModal diag={selected} patientName={patientName} onClose={() => setSelected(null)} />
+      )}
     </>
   );
 }

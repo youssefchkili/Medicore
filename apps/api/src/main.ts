@@ -15,6 +15,10 @@ async function bootstrap() {
     new FastifyAdapter(),
   );
 
+  // Ensures onModuleDestroy (Prisma's $disconnect) runs on SIGTERM/SIGINT,
+  // so the pg pool closes cleanly instead of leaking connections on container stop.
+  app.enableShutdownHooks();
+
   await app.register(helmet);
 
   // Register multipart support so face enroll/verify endpoints can receive file uploads

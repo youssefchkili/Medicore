@@ -93,36 +93,46 @@ export default function ProfilePage() {
     setSaving(true);
     setError("");
     setSaveSuccess(false);
+
+    const profileBody: Record<string, unknown> = {};
+    if (firstName) profileBody.firstName = firstName;
+    if (lastName) profileBody.lastName = lastName;
+    if (phone) profileBody.phone = phone;
+    if (dateOfBirth) profileBody.dateOfBirth = dateOfBirth;
+    if (gender) profileBody.gender = gender;
+
     try {
-      const profileBody: Record<string, unknown> = {};
-      if (firstName) profileBody.firstName = firstName;
-      if (lastName) profileBody.lastName = lastName;
-      if (phone) profileBody.phone = phone;
-      if (dateOfBirth) profileBody.dateOfBirth = dateOfBirth;
-      if (gender) profileBody.gender = gender;
-
       await apiPatch("/users/me", profileBody);
-
-      const patientBody: Record<string, unknown> = {};
-      if (bloodType) patientBody.bloodType = bloodType;
-      patientBody.allergies = allergies;
-      patientBody.chronicConditions = chronicConditions;
-      if (emergencyName || emergencyPhone || emergencyRelation) {
-        patientBody.emergencyContact = {
-          name: emergencyName,
-          phone: emergencyPhone,
-          relation: emergencyRelation,
-        };
-      }
-      await apiPatch("/users/me/patient", patientBody);
-
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save profile.");
-    } finally {
       setSaving(false);
+      setError(err instanceof Error ? err.message : "Failed to save personal information.");
+      return;
     }
+
+    const patientBody: Record<string, unknown> = {};
+    if (bloodType) patientBody.bloodType = bloodType;
+    patientBody.allergies = allergies;
+    patientBody.chronicConditions = chronicConditions;
+    if (emergencyName || emergencyPhone || emergencyRelation) {
+      patientBody.emergencyContact = {
+        name: emergencyName,
+        phone: emergencyPhone,
+        relation: emergencyRelation,
+      };
+    }
+
+    try {
+      await apiPatch("/users/me/patient", patientBody);
+    } catch (err) {
+      setSaving(false);
+      const msg = err instanceof Error ? err.message : "Failed to save health information.";
+      setError(`${msg} Your personal information was saved, but health details were not — please try saving again.`);
+      return;
+    }
+
+    setSaving(false);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
   }
 
   function addAllergy() {

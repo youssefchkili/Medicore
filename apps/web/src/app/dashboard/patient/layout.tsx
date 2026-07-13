@@ -1,11 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import PatientSidebar from "@/components/dashboard/PatientSidebar";
 import { createClient } from "@/lib/client";
 
 export default function PatientLayout({ children }: { children: React.ReactNode }) {
   const [userName, setUserName] = useState("");
+  const [allowed, setAllowed] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     (async () => {
@@ -15,9 +18,24 @@ export default function PatientLayout({ children }: { children: React.ReactNode 
         supabase.auth.getSession(),
       ]);
       const user = userData.user;
-      if (user?.user_metadata?.full_name) {
+
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+
+      // Only the account whose role is PATIENT may enter this layout
+      const metaRole = (user.user_metadata?.role as string || "").toUpperCase();
+      if (metaRole !== "PATIENT") {
+        const fallback = metaRole === "ADMIN" ? "/dashboard/admin" : "/dashboard/doctor";
+        router.replace(fallback);
+        return;
+      }
+
+      if (user.user_metadata?.full_name) {
         setUserName(user.user_metadata.full_name);
       }
+      setAllowed(true);
 
       // Safety: ensure the NestJS profile row exists (idempotent upsert).
       // This covers the case where sync-profile was skipped at login (e.g. email confirmation flow).
@@ -38,7 +56,9 @@ export default function PatientLayout({ children }: { children: React.ReactNode 
         }).catch(() => {});
       }
     })();
-  }, []);
+  }, [router]);
+
+  if (!allowed) return null;
 
   return (
     <div className="flex min-h-screen bg-[#F8FAFC]">

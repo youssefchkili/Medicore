@@ -5,8 +5,9 @@ import { apiGet, apiPost, apiPatch } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type DoctorStatus = "PENDING" | "ACTIVE" | "DEACTIVATED";
 type Specialty = { name: string };
-type DoctorRecord = { licenseNumber: string; specialty: Specialty; yearsExperience?: number | null; consultationFee?: string | null } | null;
+type DoctorRecord = { licenseNumber: string; specialty: Specialty; yearsExperience?: number | null; consultationFee?: string | null; status: DoctorStatus } | null;
 type DoctorProfile = {
   id: string;
   firstName: string;
@@ -24,9 +25,15 @@ function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+const STATUS_BADGES: Record<DoctorStatus, { label: string; color: string; bg: string; border: string }> = {
+  PENDING: { label: "PENDING", color: "#D97706", bg: "#FFFBEB", border: "#FDE68A" },
+  ACTIVE: { label: "ACTIVE", color: "#059669", bg: "#ECFDF5", border: "#6EE7B7" },
+  DEACTIVATED: { label: "DEACTIVATED", color: "#DC2626", bg: "#FFF1F2", border: "#FECDD3" },
+};
+
 function statusBadge(profile: DoctorProfile) {
-  if (!profile.isActive) return { label: "PENDING", color: "#D97706", bg: "#FFFBEB", border: "#FDE68A" };
-  return { label: "ACTIVE", color: "#059669", bg: "#ECFDF5", border: "#6EE7B7" };
+  const status = profile.doctor?.status ?? (profile.isActive ? "ACTIVE" : "PENDING");
+  return STATUS_BADGES[status];
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -38,8 +45,13 @@ export default function AdminDoctorsPage() {
   const [actionId, setActionId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const data = await apiGet<DoctorProfile[]>("/admin/users?role=DOCTOR").catch(() => []);
-    setDoctors(data);
+    try {
+      const data = await apiGet<DoctorProfile[]>("/admin/users?role=DOCTOR");
+      setDoctors(data);
+    } catch {
+      // Keep the existing list on a transient refresh failure so it doesn't
+      // wipe out the visible effect of a mutation that just succeeded.
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -56,11 +68,16 @@ export default function AdminDoctorsPage() {
     catch { /* noop */ } finally { setActionId(null); }
   }
 
+  function statusOf(d: DoctorProfile): DoctorStatus {
+    return d.doctor?.status ?? (d.isActive ? "ACTIVE" : "PENDING");
+  }
+
   const filtered = doctors
     .filter((d) => {
-      if (tab === "pending")  return !d.isActive;
-      if (tab === "active")   return d.isActive;
-      if (tab === "inactive") return !d.isActive && d.doctor !== null;
+      const status = statusOf(d);
+      if (tab === "pending")  return status === "PENDING";
+      if (tab === "active")   return status === "ACTIVE";
+      if (tab === "inactive") return status === "DEACTIVATED";
       return true;
     })
     .filter((d) => {
@@ -74,9 +91,9 @@ export default function AdminDoctorsPage() {
 
   const counts = {
     all:      doctors.length,
-    pending:  doctors.filter((d) => !d.isActive).length,
-    active:   doctors.filter((d) =>  d.isActive).length,
-    inactive: doctors.filter((d) => !d.isActive && d.doctor !== null).length,
+    pending:  doctors.filter((d) => statusOf(d) === "PENDING").length,
+    active:   doctors.filter((d) => statusOf(d) === "ACTIVE").length,
+    inactive: doctors.filter((d) => statusOf(d) === "DEACTIVATED").length,
   };
 
   const tabs: { key: Tab; label: string }[] = [
@@ -142,7 +159,8 @@ export default function AdminDoctorsPage() {
             filtered.map((doc) => {
               const { label, color, bg, border } = statusBadge(doc);
               const name = `${doc.firstName} ${doc.lastName}`;
-              const isPending = !doc.isActive;
+              const status = statusOf(doc);
+              const isPending = status === "PENDING";
               return (
                 <div
                   key={doc.id}
@@ -183,6 +201,15 @@ export default function AdminDoctorsPage() {
                         className="px-3 py-1.5 rounded-[8px] font-heading font-semibold text-[12px] text-white bg-[#059669] hover:bg-[#047857] transition-colors disabled:opacity-60"
                       >
                         {actionId === doc.id ? "…" : "Approve"}
+                      </button>
+                    ) : status === "DEACTIVATED" ? (
+                      <button
+                        onClick={() => toggle(doc.id)}
+                        disabled={actionId === doc.id}
+                        className="px-3 py-1.5 rounded-[8px] font-heading font-semibold text-[12px] border transition-colors disabled:opacity-60"
+                        style={{ color: "#059669", borderColor: "#6EE7B7", background: "#ECFDF5" }}
+                      >
+                        {actionId === doc.id ? "…" : "Reactivate"}
                       </button>
                     ) : (
                       <button

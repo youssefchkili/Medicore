@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -11,8 +15,8 @@ export class AdminService {
     const [patients, doctors, pendingDoctors, appointments, diagnostics] =
       await Promise.all([
         this.prisma.patient.count(),
-        this.prisma.doctor.count({ where: { profile: { isActive: true } } }),
-        this.prisma.profile.count({ where: { role: 'DOCTOR', isActive: false } }),
+        this.prisma.doctor.count({ where: { status: 'ACTIVE' } }),
+        this.prisma.doctor.count({ where: { status: 'PENDING' } }),
         this.prisma.appointment.count(),
         this.prisma.preDiagnostic.count(),
       ]);
@@ -32,12 +36,27 @@ export class AdminService {
   async toggleUser(actorId: string, targetId: string) {
     const profile = await this.prisma.profile.findUnique({
       where: { id: targetId },
+      include: { doctor: true },
     });
     if (!profile) throw new NotFoundException('User not found');
 
+    const newIsActive = !profile.isActive;
+
+    if (profile.role === 'DOCTOR' && profile.doctor) {
+      if (profile.doctor.status === 'PENDING') {
+        throw new BadRequestException(
+          'This doctor has not been approved yet — use the approve endpoint instead',
+        );
+      }
+      await this.prisma.doctor.update({
+        where: { profileId: targetId },
+        data: { status: newIsActive ? 'ACTIVE' : 'DEACTIVATED' },
+      });
+    }
+
     const updated = await this.prisma.profile.update({
       where: { id: targetId },
-      data: { isActive: !profile.isActive },
+      data: { isActive: newIsActive },
     });
 
     await this.prisma.auditLog.create({
@@ -56,7 +75,7 @@ export class AdminService {
 
   getPendingDoctors() {
     return this.prisma.profile.findMany({
-      where: { role: 'DOCTOR', isActive: false },
+      where: { role: 'DOCTOR', doctor: { status: 'PENDING' } },
       include: { doctor: { include: { specialty: true } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -65,8 +84,9 @@ export class AdminService {
   async approveDoctor(actorId: string, profileId: string) {
     const profile = await this.prisma.profile.findUnique({
       where: { id: profileId },
+      include: { doctor: true },
     });
-    if (!profile || (profile.role as string) !== 'DOCTOR') {
+    if (!profile || (profile.role as string) !== 'DOCTOR' || !profile.doctor) {
       throw new NotFoundException('Doctor profile not found');
     }
 
@@ -79,11 +99,19 @@ export class AdminService {
       },
     });
 
-    return this.prisma.profile.update({
-      where: { id: profileId },
-      data: { isActive: true },
-      include: { doctor: { include: { specialty: true } } },
-    });
+    const [, updatedProfile] = await this.prisma.$transaction([
+      this.prisma.doctor.update({
+        where: { profileId },
+        data: { status: 'ACTIVE' },
+      }),
+      this.prisma.profile.update({
+        where: { id: profileId },
+        data: { isActive: true },
+        include: { doctor: { include: { specialty: true } } },
+      }),
+    ]);
+
+    return updatedProfile;
   }
 
   // ─── Appointments ──────────────────────────────────────────────────────────

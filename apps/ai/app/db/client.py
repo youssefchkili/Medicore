@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import uuid
 from functools import lru_cache
 from datetime import datetime, timezone
@@ -7,6 +8,8 @@ from typing import Any
 from supabase import create_client, Client
 
 from ..config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 # ─── Singleton client ──────────────────────────────────────────────────────────
@@ -247,6 +250,73 @@ async def insert_biometric_log(
             .execute()
         )
     await asyncio.to_thread(_insert)
+
+
+# ─── WebSocket auth (chat + emotion stream) ────────────────────────────────────
+# The REST endpoints trust NestJS via a shared internal secret, but the chat and
+# emotion WebSockets are connected to directly by the browser (see NEXT_PUBLIC_AI_WS_URL),
+# bypassing NestJS entirely. They must independently verify the Supabase access
+# token passed as a `?token=` query param and confirm the caller owns the session.
+
+async def verify_jwt(token: str) -> dict | None:
+    """Validate a Supabase access-token JWT and return {id, role}, or None if invalid/expired."""
+    def _get():
+        try:
+            return _supabase().auth.get_user(token)
+        except Exception as e:
+            logger.warning("JWT verification failed: %s", e)
+            return None
+
+    result = await asyncio.to_thread(_get)
+    if result is None or not getattr(result, "user", None):
+        return None
+    return {
+        "id": result.user.id,
+        "role": (result.user.user_metadata or {}).get("role", ""),
+    }
+
+
+async def fetch_patient_id_by_profile(profile_id: str) -> str | None:
+    def _query():
+        return (
+            _supabase()
+            .table("patients")
+            .select("id")
+            .eq("profile_id", profile_id)
+            .maybe_single()
+            .execute()
+        )
+    result = await asyncio.to_thread(_query)
+    return result.data["id"] if result.data else None
+
+
+async def fetch_doctor_id_by_profile(profile_id: str) -> str | None:
+    def _query():
+        return (
+            _supabase()
+            .table("doctors")
+            .select("id")
+            .eq("profile_id", profile_id)
+            .maybe_single()
+            .execute()
+        )
+    result = await asyncio.to_thread(_query)
+    return result.data["id"] if result.data else None
+
+
+async def fetch_session_doctor_id(session_id: str) -> str | None:
+    """doctor_id owning a `sessions` row (live consultation) — authorizes the emotion stream."""
+    def _query():
+        return (
+            _supabase()
+            .table("sessions")
+            .select("doctor_id")
+            .eq("id", session_id)
+            .maybe_single()
+            .execute()
+        )
+    result = await asyncio.to_thread(_query)
+    return result.data["doctor_id"] if result.data else None
 
 
 # ─── Emotion snapshots ─────────────────────────────────────────────────────────

@@ -8,6 +8,8 @@ import { apiGet } from "@/lib/api";
 
 export default function DoctorLayout({ children }: { children: React.ReactNode }) {
   const [userName, setUserName] = useState("");
+  const [allowed, setAllowed] = useState(false);
+  const [activeChecked, setActiveChecked] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -19,9 +21,24 @@ export default function DoctorLayout({ children }: { children: React.ReactNode }
         supabase.auth.getSession(),
       ]);
       const user = userData.user;
-      if (user?.user_metadata?.full_name) {
+
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+
+      // Only the account whose role is DOCTOR may enter this layout
+      const metaRole = (user.user_metadata?.role as string || "").toUpperCase();
+      if (metaRole !== "DOCTOR") {
+        const fallback = metaRole === "ADMIN" ? "/dashboard/admin" : "/dashboard/patient";
+        router.replace(fallback);
+        return;
+      }
+
+      if (user.user_metadata?.full_name) {
         setUserName(user.user_metadata.full_name);
       }
+      setAllowed(true);
 
       const token = sessionData.session?.access_token;
       if (user && token) {
@@ -37,17 +54,31 @@ export default function DoctorLayout({ children }: { children: React.ReactNode }
           body: JSON.stringify({ firstName, lastName, role: "DOCTOR" }),
         }).catch(() => {});
 
-        // Guard: redirect inactive (pending) doctors to the waiting page
+        // Guard: redirect inactive (pending) doctors to the waiting page.
+        // Rendering is held back (see activeChecked below) until this resolves,
+        // so an inactive doctor can't see PHI in the sidebar/children for the
+        // instant between mount and this check completing.
         if (!pathname.includes("/pending")) {
           apiGet<{ isActive: boolean }>("/users/me")
             .then((profile) => {
-              if (!profile.isActive) router.replace("/dashboard/doctor/pending");
+              if (!profile.isActive) {
+                router.replace("/dashboard/doctor/pending");
+              } else {
+                setActiveChecked(true);
+              }
             })
-            .catch(() => {});
+            .catch(() => setActiveChecked(true));
+        } else {
+          setActiveChecked(true);
         }
+      } else {
+        setActiveChecked(true);
       }
     })();
   }, [pathname, router]);
+
+  if (!allowed) return null;
+  if (!pathname.includes("/pending") && !activeChecked) return null;
 
   // The pending page renders its own full-screen UI without the sidebar
   if (pathname.includes("/pending")) {

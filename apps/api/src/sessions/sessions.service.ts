@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { EndSessionDto } from './dto/end-session.dto';
 import { NotificationType, Role, SessionStatus } from '@prisma/client';
@@ -17,6 +18,7 @@ export class SessionsService {
   constructor(
     private prisma: PrismaService,
     private notifications: NotificationsService,
+    private audit: AuditService,
   ) {}
 
   // Doctor creates a session linked to one of their appointments
@@ -106,6 +108,8 @@ export class SessionsService {
     const isAdmin = user.role === Role.ADMIN;
 
     if (!isDoctor && !isPatient && !isAdmin) throw new ForbiddenException();
+
+    this.audit.log(user.id, 'SESSION_READ', 'Session', sessionId);
 
     // Strip emotion data before returning to patient
     if (isPatient && !isDoctor && !isAdmin) {
