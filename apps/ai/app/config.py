@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     deepface_model: str = "ArcFace"
     deepface_detector: str = "retinaface"
     face_similarity_threshold: float = 0.6
+    # DeepFace's Silent-Face anti-spoofing model frequently false-rejects
+    # compressed webcam frames. Disabled by default; set
+    # FACE_ANTI_SPOOFING_ENABLED=true to enforce liveness checks.
+    face_anti_spoofing_enabled: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",

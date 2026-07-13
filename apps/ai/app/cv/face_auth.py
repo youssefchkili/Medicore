@@ -42,6 +42,12 @@ def extract_embedding(image_bytes: bytes) -> tuple[list[float], float]:
 
     embedding: list[float] = results[0]["embedding"]
 
+    # Liveness/anti-spoofing can be disabled via FACE_ANTI_SPOOFING_ENABLED=false.
+    # DeepFace's Silent-Face model frequently false-rejects compressed webcam
+    # frames, so it is off by default; return a passing score when disabled.
+    if not s.face_anti_spoofing_enabled:
+        return embedding, 1.0
+
     # Anti-spoofing — available in DeepFace >= 0.0.83
     # Fails closed (0.0 = reject) if the model or parameter is unavailable, since
     # silently trusting an unverifiable check would defeat the point of spoof detection.
